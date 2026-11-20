@@ -1,0 +1,1776 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Certificate Portal</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin><link rel="preconnect" href="https://cdnjs.cloudflare.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Bengali:wght@400;700&family=Noto+Sans+Bengali:wght@400;700&family=Noto+Serif+Devanagari:wght@400;700&family=Noto+Sans+Devanagari:wght@400;700&family=Playfair+Display:wght@400;700&family=Cinzel:wght@400;700&family=Great+Vibes&family=Hind+Siliguri:wght@400;700&family=Tiro+Bangla&family=Baloo+Da+2:wght@400;700&family=Lora:wght@400;700&family=Merriweather:wght@400;700&family=Dancing+Script:wght@400;700&family=Montserrat:wght@400;700&family=Poppins:wght@400;700&display=swap" rel="stylesheet">
+<script>/* QR generator: Kazuhiko Arase, MIT licence */
+(function(){var M={},C={};function R(n){n=n.replace("./","");if(C[n])return C[n].exports;var m=C[n]={exports:{}};M[n](m,m.exports,R);return m.exports}
+M["QRMode"]=function(module,exports,require){module.exports = {
+    MODE_NUMBER :       1 << 0,
+    MODE_ALPHA_NUM :    1 << 1,
+    MODE_8BIT_BYTE :    1 << 2,
+    MODE_KANJI :        1 << 3
+};
+
+};
+M["QRErrorCorrectLevel"]=function(module,exports,require){module.exports = {
+	L : 1,
+	M : 0,
+	Q : 3,
+	H : 2
+};
+
+
+};
+M["QRMaskPattern"]=function(module,exports,require){module.exports = {
+	PATTERN000 : 0,
+	PATTERN001 : 1,
+	PATTERN010 : 2,
+	PATTERN011 : 3,
+	PATTERN100 : 4,
+	PATTERN101 : 5,
+	PATTERN110 : 6,
+	PATTERN111 : 7
+};
+
+};
+M["QRMath"]=function(module,exports,require){var QRMath = {
+
+	glog : function(n) {
+	
+		if (n < 1) {
+			throw new Error("glog(" + n + ")");
+		}
+		
+		return QRMath.LOG_TABLE[n];
+	},
+	
+	gexp : function(n) {
+	
+		while (n < 0) {
+			n += 255;
+		}
+	
+		while (n >= 256) {
+			n -= 255;
+		}
+	
+		return QRMath.EXP_TABLE[n];
+	},
+	
+	EXP_TABLE : new Array(256),
+	
+	LOG_TABLE : new Array(256)
+
+};
+	
+for (var i = 0; i < 8; i++) {
+	QRMath.EXP_TABLE[i] = 1 << i;
+}
+for (var i = 8; i < 256; i++) {
+	QRMath.EXP_TABLE[i] = QRMath.EXP_TABLE[i - 4]
+		^ QRMath.EXP_TABLE[i - 5]
+		^ QRMath.EXP_TABLE[i - 6]
+		^ QRMath.EXP_TABLE[i - 8];
+}
+for (var i = 0; i < 255; i++) {
+	QRMath.LOG_TABLE[QRMath.EXP_TABLE[i] ] = i;
+}
+
+module.exports = QRMath;
+
+};
+M["QRPolynomial"]=function(module,exports,require){var QRMath = require('./QRMath');
+
+function QRPolynomial(num, shift) {
+	if (num.length === undefined) {
+		throw new Error(num.length + "/" + shift);
+	}
+
+	var offset = 0;
+
+	while (offset < num.length && num[offset] === 0) {
+		offset++;
+	}
+
+	this.num = new Array(num.length - offset + shift);
+	for (var i = 0; i < num.length - offset; i++) {
+		this.num[i] = num[i + offset];
+	}
+}
+
+QRPolynomial.prototype = {
+
+	get : function(index) {
+		return this.num[index];
+	},
+	
+	getLength : function() {
+		return this.num.length;
+	},
+	
+	multiply : function(e) {
+	
+		var num = new Array(this.getLength() + e.getLength() - 1);
+	
+		for (var i = 0; i < this.getLength(); i++) {
+			for (var j = 0; j < e.getLength(); j++) {
+				num[i + j] ^= QRMath.gexp(QRMath.glog(this.get(i) ) + QRMath.glog(e.get(j) ) );
+			}
+		}
+	
+		return new QRPolynomial(num, 0);
+	},
+	
+	mod : function(e) {
+	
+		if (this.getLength() - e.getLength() < 0) {
+			return this;
+		}
+	
+		var ratio = QRMath.glog(this.get(0) ) - QRMath.glog(e.get(0) );
+	
+		var num = new Array(this.getLength() );
+		
+		for (var i = 0; i < this.getLength(); i++) {
+			num[i] = this.get(i);
+		}
+		
+		for (var x = 0; x < e.getLength(); x++) {
+			num[x] ^= QRMath.gexp(QRMath.glog(e.get(x) ) + ratio);
+		}
+	
+		// recursive call
+		return new QRPolynomial(num, 0).mod(e);
+	}
+};
+
+module.exports = QRPolynomial;
+
+};
+M["QRBitBuffer"]=function(module,exports,require){function QRBitBuffer() {
+	this.buffer = [];
+	this.length = 0;
+}
+
+QRBitBuffer.prototype = {
+
+	get : function(index) {
+		var bufIndex = Math.floor(index / 8);
+		return ( (this.buffer[bufIndex] >>> (7 - index % 8) ) & 1) == 1;
+	},
+	
+	put : function(num, length) {
+		for (var i = 0; i < length; i++) {
+			this.putBit( ( (num >>> (length - i - 1) ) & 1) == 1);
+		}
+	},
+	
+	getLengthInBits : function() {
+		return this.length;
+	},
+	
+	putBit : function(bit) {
+	
+		var bufIndex = Math.floor(this.length / 8);
+		if (this.buffer.length <= bufIndex) {
+			this.buffer.push(0);
+		}
+	
+		if (bit) {
+			this.buffer[bufIndex] |= (0x80 >>> (this.length % 8) );
+		}
+	
+		this.length++;
+	}
+};
+
+module.exports = QRBitBuffer;
+
+};
+M["QRRSBlock"]=function(module,exports,require){var QRErrorCorrectLevel = require('./QRErrorCorrectLevel');
+
+function QRRSBlock(totalCount, dataCount) {
+	this.totalCount = totalCount;
+	this.dataCount  = dataCount;
+}
+
+QRRSBlock.RS_BLOCK_TABLE = [
+
+	// L
+	// M
+	// Q
+	// H
+
+	// 1
+	[1, 26, 19],
+	[1, 26, 16],
+	[1, 26, 13],
+	[1, 26, 9],
+	
+	// 2
+	[1, 44, 34],
+	[1, 44, 28],
+	[1, 44, 22],
+	[1, 44, 16],
+
+	// 3
+	[1, 70, 55],
+	[1, 70, 44],
+	[2, 35, 17],
+	[2, 35, 13],
+
+	// 4		
+	[1, 100, 80],
+	[2, 50, 32],
+	[2, 50, 24],
+	[4, 25, 9],
+	
+	// 5
+	[1, 134, 108],
+	[2, 67, 43],
+	[2, 33, 15, 2, 34, 16],
+	[2, 33, 11, 2, 34, 12],
+	
+	// 6
+	[2, 86, 68],
+	[4, 43, 27],
+	[4, 43, 19],
+	[4, 43, 15],
+	
+	// 7		
+	[2, 98, 78],
+	[4, 49, 31],
+	[2, 32, 14, 4, 33, 15],
+	[4, 39, 13, 1, 40, 14],
+	
+	// 8
+	[2, 121, 97],
+	[2, 60, 38, 2, 61, 39],
+	[4, 40, 18, 2, 41, 19],
+	[4, 40, 14, 2, 41, 15],
+	
+	// 9
+	[2, 146, 116],
+	[3, 58, 36, 2, 59, 37],
+	[4, 36, 16, 4, 37, 17],
+	[4, 36, 12, 4, 37, 13],
+	
+	// 10		
+	[2, 86, 68, 2, 87, 69],
+	[4, 69, 43, 1, 70, 44],
+	[6, 43, 19, 2, 44, 20],
+	[6, 43, 15, 2, 44, 16],
+
+	// 11
+	[4, 101, 81],
+	[1, 80, 50, 4, 81, 51],
+	[4, 50, 22, 4, 51, 23],
+	[3, 36, 12, 8, 37, 13],
+
+	// 12
+	[2, 116, 92, 2, 117, 93],
+	[6, 58, 36, 2, 59, 37],
+	[4, 46, 20, 6, 47, 21],
+	[7, 42, 14, 4, 43, 15],
+
+	// 13
+	[4, 133, 107],
+	[8, 59, 37, 1, 60, 38],
+	[8, 44, 20, 4, 45, 21],
+	[12, 33, 11, 4, 34, 12],
+
+	// 14
+	[3, 145, 115, 1, 146, 116],
+	[4, 64, 40, 5, 65, 41],
+	[11, 36, 16, 5, 37, 17],
+	[11, 36, 12, 5, 37, 13],
+
+	// 15
+	[5, 109, 87, 1, 110, 88],
+	[5, 65, 41, 5, 66, 42],
+	[5, 54, 24, 7, 55, 25],
+	[11, 36, 12],
+
+	// 16
+	[5, 122, 98, 1, 123, 99],
+	[7, 73, 45, 3, 74, 46],
+	[15, 43, 19, 2, 44, 20],
+	[3, 45, 15, 13, 46, 16],
+
+	// 17
+	[1, 135, 107, 5, 136, 108],
+	[10, 74, 46, 1, 75, 47],
+	[1, 50, 22, 15, 51, 23],
+	[2, 42, 14, 17, 43, 15],
+
+	// 18
+	[5, 150, 120, 1, 151, 121],
+	[9, 69, 43, 4, 70, 44],
+	[17, 50, 22, 1, 51, 23],
+	[2, 42, 14, 19, 43, 15],
+
+	// 19
+	[3, 141, 113, 4, 142, 114],
+	[3, 70, 44, 11, 71, 45],
+	[17, 47, 21, 4, 48, 22],
+	[9, 39, 13, 16, 40, 14],
+
+	// 20
+	[3, 135, 107, 5, 136, 108],
+	[3, 67, 41, 13, 68, 42],
+	[15, 54, 24, 5, 55, 25],
+	[15, 43, 15, 10, 44, 16],
+
+	// 21
+	[4, 144, 116, 4, 145, 117],
+	[17, 68, 42],
+	[17, 50, 22, 6, 51, 23],
+	[19, 46, 16, 6, 47, 17],
+
+	// 22
+	[2, 139, 111, 7, 140, 112],
+	[17, 74, 46],
+	[7, 54, 24, 16, 55, 25],
+	[34, 37, 13],
+
+	// 23
+	[4, 151, 121, 5, 152, 122],
+	[4, 75, 47, 14, 76, 48],
+	[11, 54, 24, 14, 55, 25],
+	[16, 45, 15, 14, 46, 16],
+
+	// 24
+	[6, 147, 117, 4, 148, 118],
+	[6, 73, 45, 14, 74, 46],
+	[11, 54, 24, 16, 55, 25],
+	[30, 46, 16, 2, 47, 17],
+
+	// 25
+	[8, 132, 106, 4, 133, 107],
+	[8, 75, 47, 13, 76, 48],
+	[7, 54, 24, 22, 55, 25],
+	[22, 45, 15, 13, 46, 16],
+
+	// 26
+	[10, 142, 114, 2, 143, 115],
+	[19, 74, 46, 4, 75, 47],
+	[28, 50, 22, 6, 51, 23],
+	[33, 46, 16, 4, 47, 17],
+
+	// 27
+	[8, 152, 122, 4, 153, 123],
+	[22, 73, 45, 3, 74, 46],
+	[8, 53, 23, 26, 54, 24],
+	[12, 45, 15, 28, 46, 16],
+
+	// 28
+	[3, 147, 117, 10, 148, 118],
+	[3, 73, 45, 23, 74, 46],
+	[4, 54, 24, 31, 55, 25],
+	[11, 45, 15, 31, 46, 16],
+
+	// 29
+	[7, 146, 116, 7, 147, 117],
+	[21, 73, 45, 7, 74, 46],
+	[1, 53, 23, 37, 54, 24],
+	[19, 45, 15, 26, 46, 16],
+
+	// 30
+	[5, 145, 115, 10, 146, 116],
+	[19, 75, 47, 10, 76, 48],
+	[15, 54, 24, 25, 55, 25],
+	[23, 45, 15, 25, 46, 16],
+
+	// 31
+	[13, 145, 115, 3, 146, 116],
+	[2, 74, 46, 29, 75, 47],
+	[42, 54, 24, 1, 55, 25],
+	[23, 45, 15, 28, 46, 16],
+
+	// 32
+	[17, 145, 115],
+	[10, 74, 46, 23, 75, 47],
+	[10, 54, 24, 35, 55, 25],
+	[19, 45, 15, 35, 46, 16],
+
+	// 33
+	[17, 145, 115, 1, 146, 116],
+	[14, 74, 46, 21, 75, 47],
+	[29, 54, 24, 19, 55, 25],
+	[11, 45, 15, 46, 46, 16],
+
+	// 34
+	[13, 145, 115, 6, 146, 116],
+	[14, 74, 46, 23, 75, 47],
+	[44, 54, 24, 7, 55, 25],
+	[59, 46, 16, 1, 47, 17],
+
+	// 35
+	[12, 151, 121, 7, 152, 122],
+	[12, 75, 47, 26, 76, 48],
+	[39, 54, 24, 14, 55, 25],
+	[22, 45, 15, 41, 46, 16],
+
+	// 36
+	[6, 151, 121, 14, 152, 122],
+	[6, 75, 47, 34, 76, 48],
+	[46, 54, 24, 10, 55, 25],
+	[2, 45, 15, 64, 46, 16],
+
+	// 37
+	[17, 152, 122, 4, 153, 123],
+	[29, 74, 46, 14, 75, 47],
+	[49, 54, 24, 10, 55, 25],
+	[24, 45, 15, 46, 46, 16],
+
+	// 38
+	[4, 152, 122, 18, 153, 123],
+	[13, 74, 46, 32, 75, 47],
+	[48, 54, 24, 14, 55, 25],
+	[42, 45, 15, 32, 46, 16],
+
+	// 39
+	[20, 147, 117, 4, 148, 118],
+	[40, 75, 47, 7, 76, 48],
+	[43, 54, 24, 22, 55, 25],
+	[10, 45, 15, 67, 46, 16],
+
+	// 40
+	[19, 148, 118, 6, 149, 119],
+	[18, 75, 47, 31, 76, 48],
+	[34, 54, 24, 34, 55, 25],
+	[20, 45, 15, 61, 46, 16]
+];
+
+QRRSBlock.getRSBlocks = function(typeNumber, errorCorrectLevel) {
+	
+	var rsBlock = QRRSBlock.getRsBlockTable(typeNumber, errorCorrectLevel);
+	
+	if (rsBlock === undefined) {
+		throw new Error("bad rs block @ typeNumber:" + typeNumber + "/errorCorrectLevel:" + errorCorrectLevel);
+	}
+
+	var length = rsBlock.length / 3;
+	
+	var list = [];
+	
+	for (var i = 0; i < length; i++) {
+
+		var count = rsBlock[i * 3 + 0];
+		var totalCount = rsBlock[i * 3 + 1];
+		var dataCount  = rsBlock[i * 3 + 2];
+
+		for (var j = 0; j < count; j++) {
+			list.push(new QRRSBlock(totalCount, dataCount) );	
+		}
+	}
+	
+	return list;
+};
+
+QRRSBlock.getRsBlockTable = function(typeNumber, errorCorrectLevel) {
+
+	switch(errorCorrectLevel) {
+	case QRErrorCorrectLevel.L :
+		return QRRSBlock.RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 0];
+	case QRErrorCorrectLevel.M :
+		return QRRSBlock.RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 1];
+	case QRErrorCorrectLevel.Q :
+		return QRRSBlock.RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 2];
+	case QRErrorCorrectLevel.H :
+		return QRRSBlock.RS_BLOCK_TABLE[(typeNumber - 1) * 4 + 3];
+	default :
+		return undefined;
+	}
+};
+
+module.exports = QRRSBlock;
+
+};
+M["QRUtil"]=function(module,exports,require){var QRMode = require('./QRMode');
+var QRPolynomial = require('./QRPolynomial');
+var QRMath = require('./QRMath');
+var QRMaskPattern = require('./QRMaskPattern');
+
+var QRUtil = {
+
+    PATTERN_POSITION_TABLE : [
+        [],
+        [6, 18],
+        [6, 22],
+        [6, 26],
+        [6, 30],
+        [6, 34],
+        [6, 22, 38],
+        [6, 24, 42],
+        [6, 26, 46],
+        [6, 28, 50],
+        [6, 30, 54],        
+        [6, 32, 58],
+        [6, 34, 62],
+        [6, 26, 46, 66],
+        [6, 26, 48, 70],
+        [6, 26, 50, 74],
+        [6, 30, 54, 78],
+        [6, 30, 56, 82],
+        [6, 30, 58, 86],
+        [6, 34, 62, 90],
+        [6, 28, 50, 72, 94],
+        [6, 26, 50, 74, 98],
+        [6, 30, 54, 78, 102],
+        [6, 28, 54, 80, 106],
+        [6, 32, 58, 84, 110],
+        [6, 30, 58, 86, 114],
+        [6, 34, 62, 90, 118],
+        [6, 26, 50, 74, 98, 122],
+        [6, 30, 54, 78, 102, 126],
+        [6, 26, 52, 78, 104, 130],
+        [6, 30, 56, 82, 108, 134],
+        [6, 34, 60, 86, 112, 138],
+        [6, 30, 58, 86, 114, 142],
+        [6, 34, 62, 90, 118, 146],
+        [6, 30, 54, 78, 102, 126, 150],
+        [6, 24, 50, 76, 102, 128, 154],
+        [6, 28, 54, 80, 106, 132, 158],
+        [6, 32, 58, 84, 110, 136, 162],
+        [6, 26, 54, 82, 110, 138, 166],
+        [6, 30, 58, 86, 114, 142, 170]
+    ],
+
+    G15 : (1 << 10) | (1 << 8) | (1 << 5) | (1 << 4) | (1 << 2) | (1 << 1) | (1 << 0),
+    G18 : (1 << 12) | (1 << 11) | (1 << 10) | (1 << 9) | (1 << 8) | (1 << 5) | (1 << 2) | (1 << 0),
+    G15_MASK : (1 << 14) | (1 << 12) | (1 << 10)    | (1 << 4) | (1 << 1),
+
+    getBCHTypeInfo : function(data) {
+        var d = data << 10;
+        while (QRUtil.getBCHDigit(d) - QRUtil.getBCHDigit(QRUtil.G15) >= 0) {
+            d ^= (QRUtil.G15 << (QRUtil.getBCHDigit(d) - QRUtil.getBCHDigit(QRUtil.G15) ) );    
+        }
+        return ( (data << 10) | d) ^ QRUtil.G15_MASK;
+    },
+
+    getBCHTypeNumber : function(data) {
+        var d = data << 12;
+        while (QRUtil.getBCHDigit(d) - QRUtil.getBCHDigit(QRUtil.G18) >= 0) {
+            d ^= (QRUtil.G18 << (QRUtil.getBCHDigit(d) - QRUtil.getBCHDigit(QRUtil.G18) ) );    
+        }
+        return (data << 12) | d;
+    },
+
+    getBCHDigit : function(data) {
+
+        var digit = 0;
+
+        while (data !== 0) {
+            digit++;
+            data >>>= 1;
+        }
+
+        return digit;
+    },
+
+    getPatternPosition : function(typeNumber) {
+        return QRUtil.PATTERN_POSITION_TABLE[typeNumber - 1];
+    },
+
+    getMask : function(maskPattern, i, j) {
+        
+        switch (maskPattern) {
+            
+        case QRMaskPattern.PATTERN000 : return (i + j) % 2 === 0;
+        case QRMaskPattern.PATTERN001 : return i % 2 === 0;
+        case QRMaskPattern.PATTERN010 : return j % 3 === 0;
+        case QRMaskPattern.PATTERN011 : return (i + j) % 3 === 0;
+        case QRMaskPattern.PATTERN100 : return (Math.floor(i / 2) + Math.floor(j / 3) ) % 2 === 0;
+        case QRMaskPattern.PATTERN101 : return (i * j) % 2 + (i * j) % 3 === 0;
+        case QRMaskPattern.PATTERN110 : return ( (i * j) % 2 + (i * j) % 3) % 2 === 0;
+        case QRMaskPattern.PATTERN111 : return ( (i * j) % 3 + (i + j) % 2) % 2 === 0;
+
+        default :
+            throw new Error("bad maskPattern:" + maskPattern);
+        }
+    },
+
+    getErrorCorrectPolynomial : function(errorCorrectLength) {
+
+        var a = new QRPolynomial([1], 0);
+
+        for (var i = 0; i < errorCorrectLength; i++) {
+            a = a.multiply(new QRPolynomial([1, QRMath.gexp(i)], 0) );
+        }
+
+        return a;
+    },
+
+    getLengthInBits : function(mode, type) {
+
+        if (1 <= type && type < 10) {
+
+            // 1 - 9
+
+            switch(mode) {
+            case QRMode.MODE_NUMBER     : return 10;
+            case QRMode.MODE_ALPHA_NUM  : return 9;
+            case QRMode.MODE_8BIT_BYTE  : return 8;
+            case QRMode.MODE_KANJI      : return 8;
+            default :
+                throw new Error("mode:" + mode);
+            }
+
+        } else if (type < 27) {
+
+            // 10 - 26
+
+            switch(mode) {
+            case QRMode.MODE_NUMBER     : return 12;
+            case QRMode.MODE_ALPHA_NUM  : return 11;
+            case QRMode.MODE_8BIT_BYTE  : return 16;
+            case QRMode.MODE_KANJI      : return 10;
+            default :
+                throw new Error("mode:" + mode);
+            }
+
+        } else if (type < 41) {
+
+            // 27 - 40
+
+            switch(mode) {
+            case QRMode.MODE_NUMBER     : return 14;
+            case QRMode.MODE_ALPHA_NUM  : return 13;
+            case QRMode.MODE_8BIT_BYTE  : return 16;
+            case QRMode.MODE_KANJI      : return 12;
+            default :
+                throw new Error("mode:" + mode);
+            }
+
+        } else {
+            throw new Error("type:" + type);
+        }
+    },
+
+    getLostPoint : function(qrCode) {
+        
+        var moduleCount = qrCode.getModuleCount();
+        var lostPoint = 0;
+        var row = 0; 
+        var col = 0;
+
+        
+        // LEVEL1
+        
+        for (row = 0; row < moduleCount; row++) {
+
+            for (col = 0; col < moduleCount; col++) {
+
+                var sameCount = 0;
+                var dark = qrCode.isDark(row, col);
+
+                for (var r = -1; r <= 1; r++) {
+
+                    if (row + r < 0 || moduleCount <= row + r) {
+                        continue;
+                    }
+
+                    for (var c = -1; c <= 1; c++) {
+
+                        if (col + c < 0 || moduleCount <= col + c) {
+                            continue;
+                        }
+
+                        if (r === 0 && c === 0) {
+                            continue;
+                        }
+
+                        if (dark === qrCode.isDark(row + r, col + c) ) {
+                            sameCount++;
+                        }
+                    }
+                }
+
+                if (sameCount > 5) {
+                    lostPoint += (3 + sameCount - 5);
+                }
+            }
+        }
+
+        // LEVEL2
+
+        for (row = 0; row < moduleCount - 1; row++) {
+            for (col = 0; col < moduleCount - 1; col++) {
+                var count = 0;
+                if (qrCode.isDark(row,     col    ) ) count++;
+                if (qrCode.isDark(row + 1, col    ) ) count++;
+                if (qrCode.isDark(row,     col + 1) ) count++;
+                if (qrCode.isDark(row + 1, col + 1) ) count++;
+                if (count === 0 || count === 4) {
+                    lostPoint += 3;
+                }
+            }
+        }
+
+        // LEVEL3
+
+        for (row = 0; row < moduleCount; row++) {
+            for (col = 0; col < moduleCount - 6; col++) {
+                if (qrCode.isDark(row, col) && 
+                        !qrCode.isDark(row, col + 1) && 
+                         qrCode.isDark(row, col + 2) && 
+                         qrCode.isDark(row, col + 3) && 
+                         qrCode.isDark(row, col + 4) && 
+                        !qrCode.isDark(row, col + 5) && 
+                         qrCode.isDark(row, col + 6) ) {
+                    lostPoint += 40;
+                }
+            }
+        }
+
+        for (col = 0; col < moduleCount; col++) {
+            for (row = 0; row < moduleCount - 6; row++) {
+                if (qrCode.isDark(row, col) &&
+                        !qrCode.isDark(row + 1, col) &&
+                         qrCode.isDark(row + 2, col) &&
+                         qrCode.isDark(row + 3, col) &&
+                         qrCode.isDark(row + 4, col) &&
+                        !qrCode.isDark(row + 5, col) &&
+                         qrCode.isDark(row + 6, col) ) {
+                    lostPoint += 40;
+                }
+            }
+        }
+
+        // LEVEL4
+        
+        var darkCount = 0;
+
+        for (col = 0; col < moduleCount; col++) {
+            for (row = 0; row < moduleCount; row++) {
+                if (qrCode.isDark(row, col) ) {
+                    darkCount++;
+                }
+            }
+        }
+        
+        var ratio = Math.abs(100 * darkCount / moduleCount / moduleCount - 50) / 5;
+        lostPoint += ratio * 10;
+
+        return lostPoint;       
+    }
+
+};
+
+module.exports = QRUtil;
+
+};
+M["QR8bitByte"]=function(module,exports,require){var QRMode = require('./QRMode');
+
+function QR8bitByte(data) {
+	this.mode = QRMode.MODE_8BIT_BYTE;
+	this.data = data;
+}
+
+QR8bitByte.prototype = {
+
+	getLength : function() {
+		return this.data.length;
+	},
+	
+	write : function(buffer) {
+		for (var i = 0; i < this.data.length; i++) {
+			// not JIS ...
+			buffer.put(this.data.charCodeAt(i), 8);
+		}
+	}
+};
+
+module.exports = QR8bitByte;
+
+};
+M["index"]=function(module,exports,require){//---------------------------------------------------------------------
+// QRCode for JavaScript
+//
+// Copyright (c) 2009 Kazuhiko Arase
+//
+// URL: http://www.d-project.com/
+//
+// Licensed under the MIT license:
+//   http://www.opensource.org/licenses/mit-license.php
+//
+// The word "QR Code" is registered trademark of 
+// DENSO WAVE INCORPORATED
+//   http://www.denso-wave.com/qrcode/faqpatent-e.html
+//
+//---------------------------------------------------------------------
+// Modified to work in node for this project (and some refactoring)
+//---------------------------------------------------------------------
+
+var QR8bitByte = require('./QR8bitByte');
+var QRUtil = require('./QRUtil');
+var QRPolynomial = require('./QRPolynomial');
+var QRRSBlock = require('./QRRSBlock');
+var QRBitBuffer = require('./QRBitBuffer');
+
+function QRCode(typeNumber, errorCorrectLevel) {
+	this.typeNumber = typeNumber;
+	this.errorCorrectLevel = errorCorrectLevel;
+	this.modules = null;
+	this.moduleCount = 0;
+	this.dataCache = null;
+	this.dataList = [];
+}
+
+QRCode.prototype = {
+	
+	addData : function(data) {
+		var newData = new QR8bitByte(data);
+		this.dataList.push(newData);
+		this.dataCache = null;
+	},
+	
+	isDark : function(row, col) {
+		if (row < 0 || this.moduleCount <= row || col < 0 || this.moduleCount <= col) {
+			throw new Error(row + "," + col);
+		}
+		return this.modules[row][col];
+	},
+
+	getModuleCount : function() {
+		return this.moduleCount;
+	},
+	
+	make : function() {
+		// Calculate automatically typeNumber if provided is < 1
+		if (this.typeNumber < 1 ){
+			var typeNumber = 1;
+			for (typeNumber = 1; typeNumber < 40; typeNumber++) {
+				var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, this.errorCorrectLevel);
+
+				var buffer = new QRBitBuffer();
+				var totalDataCount = 0;
+				for (var i = 0; i < rsBlocks.length; i++) {
+					totalDataCount += rsBlocks[i].dataCount;
+				}
+
+				for (var x = 0; x < this.dataList.length; x++) {
+					var data = this.dataList[x];
+					buffer.put(data.mode, 4);
+					buffer.put(data.getLength(), QRUtil.getLengthInBits(data.mode, typeNumber) );
+					data.write(buffer);
+				}
+				if (buffer.getLengthInBits() <= totalDataCount * 8)
+					break;
+			}
+			this.typeNumber = typeNumber;
+		}
+		this.makeImpl(false, this.getBestMaskPattern() );
+	},
+	
+	makeImpl : function(test, maskPattern) {
+		
+		this.moduleCount = this.typeNumber * 4 + 17;
+		this.modules = new Array(this.moduleCount);
+		
+		for (var row = 0; row < this.moduleCount; row++) {
+			
+			this.modules[row] = new Array(this.moduleCount);
+			
+			for (var col = 0; col < this.moduleCount; col++) {
+				this.modules[row][col] = null;//(col + row) % 3;
+			}
+		}
+	
+		this.setupPositionProbePattern(0, 0);
+		this.setupPositionProbePattern(this.moduleCount - 7, 0);
+		this.setupPositionProbePattern(0, this.moduleCount - 7);
+		this.setupPositionAdjustPattern();
+		this.setupTimingPattern();
+		this.setupTypeInfo(test, maskPattern);
+		
+		if (this.typeNumber >= 7) {
+			this.setupTypeNumber(test);
+		}
+	
+		if (this.dataCache === null) {
+			this.dataCache = QRCode.createData(this.typeNumber, this.errorCorrectLevel, this.dataList);
+		}
+	
+		this.mapData(this.dataCache, maskPattern);
+	},
+
+	setupPositionProbePattern : function(row, col)  {
+		
+		for (var r = -1; r <= 7; r++) {
+			
+			if (row + r <= -1 || this.moduleCount <= row + r) continue;
+			
+			for (var c = -1; c <= 7; c++) {
+				
+				if (col + c <= -1 || this.moduleCount <= col + c) continue;
+				
+				if ( (0 <= r && r <= 6 && (c === 0 || c === 6) ) || 
+                     (0 <= c && c <= 6 && (r === 0 || r === 6) ) || 
+                     (2 <= r && r <= 4 && 2 <= c && c <= 4) ) {
+					this.modules[row + r][col + c] = true;
+				} else {
+					this.modules[row + r][col + c] = false;
+				}
+			}		
+		}		
+	},
+	
+	getBestMaskPattern : function() {
+	
+		var minLostPoint = 0;
+		var pattern = 0;
+	
+		for (var i = 0; i < 8; i++) {
+			
+			this.makeImpl(true, i);
+	
+			var lostPoint = QRUtil.getLostPoint(this);
+	
+			if (i === 0 || minLostPoint >  lostPoint) {
+				minLostPoint = lostPoint;
+				pattern = i;
+			}
+		}
+	
+		return pattern;
+	},
+	
+	createMovieClip : function(target_mc, instance_name, depth) {
+	
+		var qr_mc = target_mc.createEmptyMovieClip(instance_name, depth);
+		var cs = 1;
+	
+		this.make();
+
+		for (var row = 0; row < this.modules.length; row++) {
+			
+			var y = row * cs;
+			
+			for (var col = 0; col < this.modules[row].length; col++) {
+	
+				var x = col * cs;
+				var dark = this.modules[row][col];
+			
+				if (dark) {
+					qr_mc.beginFill(0, 100);
+					qr_mc.moveTo(x, y);
+					qr_mc.lineTo(x + cs, y);
+					qr_mc.lineTo(x + cs, y + cs);
+					qr_mc.lineTo(x, y + cs);
+					qr_mc.endFill();
+				}
+			}
+		}
+		
+		return qr_mc;
+	},
+
+	setupTimingPattern : function() {
+		
+		for (var r = 8; r < this.moduleCount - 8; r++) {
+			if (this.modules[r][6] !== null) {
+				continue;
+			}
+			this.modules[r][6] = (r % 2 === 0);
+		}
+	
+		for (var c = 8; c < this.moduleCount - 8; c++) {
+			if (this.modules[6][c] !== null) {
+				continue;
+			}
+			this.modules[6][c] = (c % 2 === 0);
+		}
+	},
+	
+	setupPositionAdjustPattern : function() {
+	
+		var pos = QRUtil.getPatternPosition(this.typeNumber);
+		
+		for (var i = 0; i < pos.length; i++) {
+		
+			for (var j = 0; j < pos.length; j++) {
+			
+				var row = pos[i];
+				var col = pos[j];
+				
+				if (this.modules[row][col] !== null) {
+					continue;
+				}
+				
+				for (var r = -2; r <= 2; r++) {
+				
+					for (var c = -2; c <= 2; c++) {
+					
+						if (Math.abs(r) === 2 || 
+                            Math.abs(c) === 2 ||
+                            (r === 0 && c === 0) ) {
+							this.modules[row + r][col + c] = true;
+						} else {
+							this.modules[row + r][col + c] = false;
+						}
+					}
+				}
+			}
+		}
+	},
+	
+	setupTypeNumber : function(test) {
+	
+		var bits = QRUtil.getBCHTypeNumber(this.typeNumber);
+        var mod;
+	
+		for (var i = 0; i < 18; i++) {
+			mod = (!test && ( (bits >> i) & 1) === 1);
+			this.modules[Math.floor(i / 3)][i % 3 + this.moduleCount - 8 - 3] = mod;
+		}
+	
+		for (var x = 0; x < 18; x++) {
+			mod = (!test && ( (bits >> x) & 1) === 1);
+			this.modules[x % 3 + this.moduleCount - 8 - 3][Math.floor(x / 3)] = mod;
+		}
+	},
+	
+	setupTypeInfo : function(test, maskPattern) {
+	
+		var data = (this.errorCorrectLevel << 3) | maskPattern;
+		var bits = QRUtil.getBCHTypeInfo(data);
+        var mod;
+	
+		// vertical		
+		for (var v = 0; v < 15; v++) {
+	
+			mod = (!test && ( (bits >> v) & 1) === 1);
+	
+			if (v < 6) {
+				this.modules[v][8] = mod;
+			} else if (v < 8) {
+				this.modules[v + 1][8] = mod;
+			} else {
+				this.modules[this.moduleCount - 15 + v][8] = mod;
+			}
+		}
+	
+		// horizontal
+		for (var h = 0; h < 15; h++) {
+	
+			mod = (!test && ( (bits >> h) & 1) === 1);
+			
+			if (h < 8) {
+				this.modules[8][this.moduleCount - h - 1] = mod;
+			} else if (h < 9) {
+				this.modules[8][15 - h - 1 + 1] = mod;
+			} else {
+				this.modules[8][15 - h - 1] = mod;
+			}
+		}
+	
+		// fixed module
+		this.modules[this.moduleCount - 8][8] = (!test);
+	
+	},
+	
+	mapData : function(data, maskPattern) {
+		
+		var inc = -1;
+		var row = this.moduleCount - 1;
+		var bitIndex = 7;
+		var byteIndex = 0;
+		
+		for (var col = this.moduleCount - 1; col > 0; col -= 2) {
+	
+			if (col === 6) col--;
+	
+			while (true) {
+	
+				for (var c = 0; c < 2; c++) {
+					
+					if (this.modules[row][col - c] === null) {
+						
+						var dark = false;
+	
+						if (byteIndex < data.length) {
+							dark = ( ( (data[byteIndex] >>> bitIndex) & 1) === 1);
+						}
+	
+						var mask = QRUtil.getMask(maskPattern, row, col - c);
+	
+						if (mask) {
+							dark = !dark;
+						}
+						
+						this.modules[row][col - c] = dark;
+						bitIndex--;
+	
+						if (bitIndex === -1) {
+							byteIndex++;
+							bitIndex = 7;
+						}
+					}
+				}
+								
+				row += inc;
+	
+				if (row < 0 || this.moduleCount <= row) {
+					row -= inc;
+					inc = -inc;
+					break;
+				}
+			}
+		}
+		
+	}
+
+};
+
+QRCode.PAD0 = 0xEC;
+QRCode.PAD1 = 0x11;
+
+QRCode.createData = function(typeNumber, errorCorrectLevel, dataList) {
+	
+	var rsBlocks = QRRSBlock.getRSBlocks(typeNumber, errorCorrectLevel);
+	
+	var buffer = new QRBitBuffer();
+	
+	for (var i = 0; i < dataList.length; i++) {
+		var data = dataList[i];
+		buffer.put(data.mode, 4);
+		buffer.put(data.getLength(), QRUtil.getLengthInBits(data.mode, typeNumber) );
+		data.write(buffer);
+	}
+
+	// calc num max data.
+	var totalDataCount = 0;
+	for (var x = 0; x < rsBlocks.length; x++) {
+		totalDataCount += rsBlocks[x].dataCount;
+	}
+
+	if (buffer.getLengthInBits() > totalDataCount * 8) {
+		throw new Error("code length overflow. (" + 
+            buffer.getLengthInBits() + 
+            ">" +  
+            totalDataCount * 8 + 
+            ")");
+	}
+
+	// end code
+	if (buffer.getLengthInBits() + 4 <= totalDataCount * 8) {
+		buffer.put(0, 4);
+	}
+
+	// padding
+	while (buffer.getLengthInBits() % 8 !== 0) {
+		buffer.putBit(false);
+	}
+
+	// padding
+	while (true) {
+		
+		if (buffer.getLengthInBits() >= totalDataCount * 8) {
+			break;
+		}
+		buffer.put(QRCode.PAD0, 8);
+		
+		if (buffer.getLengthInBits() >= totalDataCount * 8) {
+			break;
+		}
+		buffer.put(QRCode.PAD1, 8);
+	}
+
+	return QRCode.createBytes(buffer, rsBlocks);
+};
+
+QRCode.createBytes = function(buffer, rsBlocks) {
+
+	var offset = 0;
+	
+	var maxDcCount = 0;
+	var maxEcCount = 0;
+	
+	var dcdata = new Array(rsBlocks.length);
+	var ecdata = new Array(rsBlocks.length);
+	
+	for (var r = 0; r < rsBlocks.length; r++) {
+
+		var dcCount = rsBlocks[r].dataCount;
+		var ecCount = rsBlocks[r].totalCount - dcCount;
+
+		maxDcCount = Math.max(maxDcCount, dcCount);
+		maxEcCount = Math.max(maxEcCount, ecCount);
+		
+		dcdata[r] = new Array(dcCount);
+		
+		for (var i = 0; i < dcdata[r].length; i++) {
+			dcdata[r][i] = 0xff & buffer.buffer[i + offset];
+		}
+		offset += dcCount;
+		
+		var rsPoly = QRUtil.getErrorCorrectPolynomial(ecCount);
+		var rawPoly = new QRPolynomial(dcdata[r], rsPoly.getLength() - 1);
+
+		var modPoly = rawPoly.mod(rsPoly);
+		ecdata[r] = new Array(rsPoly.getLength() - 1);
+		for (var x = 0; x < ecdata[r].length; x++) {
+            var modIndex = x + modPoly.getLength() - ecdata[r].length;
+			ecdata[r][x] = (modIndex >= 0)? modPoly.get(modIndex) : 0;
+		}
+
+	}
+	
+	var totalCodeCount = 0;
+	for (var y = 0; y < rsBlocks.length; y++) {
+		totalCodeCount += rsBlocks[y].totalCount;
+	}
+
+	var data = new Array(totalCodeCount);
+	var index = 0;
+
+	for (var z = 0; z < maxDcCount; z++) {
+		for (var s = 0; s < rsBlocks.length; s++) {
+			if (z < dcdata[s].length) {
+				data[index++] = dcdata[s][z];
+			}
+		}
+	}
+
+	for (var xx = 0; xx < maxEcCount; xx++) {
+		for (var t = 0; t < rsBlocks.length; t++) {
+			if (xx < ecdata[t].length) {
+				data[index++] = ecdata[t][xx];
+			}
+		}
+	}
+
+	return data;
+
+};
+
+module.exports = QRCode;
+
+};
+window.QRGen=R("index");})();</script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script defer src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<style>
+:root{--pd:#5a1010;--ac:#d4a017;--p:#8B1E1E;--p2:#c0392b;--bg:#fcf9f2;--card:#fff;--bd:#e6dfd1;--tx:#2d2a26;--mu:#6b655d;--soft:#f7f4ed}
+@media (prefers-color-scheme:dark){:root{--bg:#161413;--card:#221f1d;--bd:#3a3631;--tx:#efe9df;--mu:#a59d91;--soft:#2a2724}}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+body{font-family:-apple-system,"Segoe UI","Noto Sans Bengali","Noto Sans Devanagari",Roboto,Arial,sans-serif;background:var(--bg);color:var(--tx);line-height:1.5;padding:14px;min-height:100vh;position:relative;overflow-x:hidden}
+.orb{position:fixed;border-radius:50%;filter:blur(70px);opacity:.28;z-index:0;pointer-events:none;animation:fl 14s ease-in-out infinite}
+.o1{width:300px;height:300px;background:var(--p2);top:-80px;left:-80px}.o2{width:260px;height:260px;background:var(--ac);bottom:-60px;right:-60px;animation-delay:-6s}
+@keyframes fl{0%,100%{transform:translate(0,0)}50%{transform:translate(40px,30px)}}
+@keyframes grad{0%{background-position:0 50%}50%{background-position:100% 50%}100%{background-position:0 50%}}
+@keyframes up{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:none}}
+@keyframes zin{from{opacity:0;transform:scale(.94)}to{opacity:1;transform:none}}
+@keyframes pulse{0%{box-shadow:0 0 0 0 rgba(46,160,67,.6)}100%{box-shadow:0 0 0 10px rgba(46,160,67,0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
+.c{position:relative;z-index:1;max-width:920px;margin:0 auto;background:var(--card);border:1px solid var(--bd);border-radius:14px;overflow:clip;box-shadow:0 10px 40px rgba(0,0,0,.12);animation:up .6s}
+header{padding:16px 20px;display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap;color:var(--ht,#fff);background:linear-gradient(120deg,var(--p),var(--p2),var(--pd),var(--p));background-size:300% 300%;animation:grad 12s ease infinite}
+h1{font-size:15px;letter-spacing:.6px}header p{font-size:11px;opacity:.85;text-transform:uppercase}
+.hd{display:flex;align-items:center;gap:10px}.hd img{height:40px;border-radius:6px;background:#fff;padding:2px}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;background:rgba(255,255,255,.18);margin-top:4px}
+.dot{width:9px;height:9px;border-radius:50%;background:#2ea043;animation:pulse 1.6s infinite}.dot.off{background:#e5534b;animation:none}
+.nav,.act{display:flex;gap:8px;flex-wrap:wrap}.act{margin-top:12px}
+.b{position:relative;overflow:hidden;background:var(--p);color:#fff;border:0;padding:9px 15px;font-size:12px;font-weight:600;border-radius:6px;cursor:pointer;transition:transform .15s,box-shadow .15s}
+.b:hover{transform:translateY(-2px);box-shadow:0 6px 14px rgba(139,30,30,.3)}.b:active{transform:scale(.97)}
+.b::after{content:"";position:absolute;top:0;left:-120%;width:60%;height:100%;background:linear-gradient(90deg,transparent,rgba(255,255,255,.35),transparent);transform:skewX(-20deg)}.b:hover::after{left:140%;transition:left .6s}
+.bo{background:transparent;color:var(--tx);border:1px solid var(--bd)}header .bo{color:var(--ht,#fff);border-color:color-mix(in srgb,var(--ht,#fff) 50%,transparent)}
+.ls{width:auto;font-size:13px;padding:7px 9px;background:rgba(255,255,255,.18);color:var(--ht,#fff);border:1px solid color-mix(in srgb,var(--ht,#fff) 50%,transparent);border-radius:6px}.ls option{color:#222;background:#fff}
+.tabs{display:flex;background:var(--soft);border-bottom:1px solid var(--bd)}
+.tab{flex:1;padding:13px 4px;font-size:13px;font-weight:600;color:var(--mu);background:none;border:0;cursor:pointer;transition:.25s}.tab.on{background:var(--p);color:#fff}
+.sec{padding:22px 18px;animation:up .5s}.sec h2{font-size:16px;margin-bottom:4px}.sec p.s{font-size:13px;color:var(--mu);margin-bottom:16px}
+.g{margin-bottom:14px}label{display:block;font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--mu);margin-bottom:5px}
+input,select,textarea{width:100%;padding:11px;font-size:16px;border:1px solid var(--bd);border-radius:6px;background:var(--card);color:var(--tx);font-family:inherit;transition:border .2s,box-shadow .2s}
+input:focus,select:focus,textarea:focus{outline:0;border-color:var(--p);box-shadow:0 0 0 3px rgba(139,30,30,.15)}
+.sb{width:100%;background:linear-gradient(90deg,var(--p),var(--p2));color:#fff;border:0;padding:14px;font-size:14px;font-weight:600;border-radius:6px;cursor:pointer;transition:.2s}.sb:hover{filter:brightness(1.1)}.sb:disabled{opacity:.6}
+.err{color:#c0392b;font-size:13px;margin-bottom:10px;min-height:1px}.hide{display:none!important}
+.ok{background:#e6f4ea;color:#1e6b2f;padding:12px;border-radius:8px;font-weight:700;margin-bottom:10px;animation:zin .4s}
+.bad{background:#fdecea;color:#b3261e;padding:12px;border-radius:8px;font-weight:700;margin-bottom:10px;animation:zin .4s}
+.wait{background:#fff6e0;color:#8a5a00;padding:12px;border-radius:8px;font-weight:600;margin:10px 0;animation:zin .4s}
+.sp{display:inline-block;width:14px;height:14px;border:2px solid var(--p);border-top-color:transparent;border-radius:50%;animation:spin .7s linear infinite;vertical-align:middle;margin-right:6px}
+.rv{animation:zin .6s}
+.cert{position:relative;text-align:center;background:#fff;color:#1a1a1a;overflow:hidden}
+.ci{position:relative;z-index:1;display:flex;flex-direction:column;justify-content:center;height:100%}
+.cl{display:grid;grid-template-columns:1fr 1fr 1fr;align-items:center;margin-bottom:.4em}.cl>div:nth-child(1){justify-self:start}.cl>div:nth-child(2){justify-self:center}.cl>div:nth-child(3){justify-self:end}.cl img{max-height:4.6em;max-width:7em}
+.qr{display:flex;flex-direction:column;align-items:center;font-size:.6em;color:#555;margin:.8em auto 0}.qr img,.qr canvas{width:100%!important;height:100%!important}
+.sgs{display:flex;flex-wrap:wrap;justify-content:space-around;gap:1em;margin-top:1em}.sgs>div{min-width:8em;font-size:.7em}
+.sgi{height:3em;display:flex;align-items:flex-end;justify-content:center}.sgi img{max-height:var(--ih,3em);max-width:9em}.sg{border-top:1px solid #333;padding-top:.2em;font-weight:bold;color:#444}
+video{width:100%;max-width:420px;border-radius:10px;background:#000}
+.tw{overflow-x:auto}table{width:100%;border-collapse:collapse;font-size:12px}th,td{text-align:left;padding:8px;border-bottom:1px solid var(--bd);white-space:nowrap}
+.st{font-size:11px;font-weight:700;padding:2px 8px;border-radius:10px}.Approved{background:#e6f4ea;color:#1e6b2f}.Pending{background:#fff6e0;color:#8a5a00}.Rejected{background:#fdecea;color:#b3261e}
+details{border:1px solid var(--bd);border-radius:8px;padding:10px 12px;margin-bottom:12px}summary{font-weight:700;font-size:13px;cursor:pointer}
+.im{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.im img{height:34px;border:1px solid var(--bd);background:#fff}.im input{width:auto;font-size:12px;padding:6px}
+.sgb{border:1px solid var(--bd);border-radius:8px;padding:10px;margin-bottom:10px}
+footer{text-align:center;padding:18px;border-top:1px solid var(--bd);background:var(--soft);font-size:12px;color:var(--mu)}
+footer .th{font-size:14px;font-weight:700;color:var(--tx);margin-bottom:6px}
+#pa{position:absolute;left:-99999px;top:0}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+
+.sec{border-radius:18px;box-shadow:0 14px 40px rgba(60,30,20,.10)}
+.b{transition:transform .15s,box-shadow .15s}.b:hover{transform:translateY(-1px);box-shadow:0 6px 16px rgba(0,0,0,.14)}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--p2);outline-offset:1px}
+details{background:var(--soft)}summary{letter-spacing:.2px}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(120px,1fr));gap:10px;margin-bottom:12px}
+.stat{background:linear-gradient(135deg,var(--p),var(--p2));color:#fff;border-radius:14px;padding:12px 14px;box-shadow:0 8px 20px rgba(139,30,30,.25)}
+.stat b{display:block;font-size:24px;line-height:1.1}.stat span{font-size:11px;opacity:.9;letter-spacing:.4px}
+.gal{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-top:12px}
+.gal figure{margin:0;border-radius:12px;overflow:hidden;border:1px solid var(--bd);background:var(--card)}
+.gal img{width:100%;height:120px;object-fit:cover;display:block}.gal figcaption{font-size:12px;padding:6px 8px;color:var(--mu)}
+.dsg .mel{cursor:move;outline:1px dashed rgba(26,115,232,.6);touch-action:none;user-select:none}.dsg .mel.sel{outline:2px solid #1a73e8;background:rgba(26,115,232,.08)}.dsg img{pointer-events:none}
+.pgrid{display:grid;grid-template-columns:minmax(300px,.9fr) minmax(320px,1.1fr);gap:16px;align-items:start}.pr{position:sticky;top:8px;max-height:calc(100vh - 16px);overflow:auto}@media(max-width:900px){.pgrid{grid-template-columns:1fr}.pr{top:0;z-index:30;order:-1;background:var(--card);padding:6px 0;box-shadow:0 6px 14px rgba(0,0,0,.15);max-height:42vh}}.c:has(#admin:not(.hide)){max-width:1400px}
+body.ld .c{visibility:hidden}#ldr{display:none}body.ld #ldr{display:flex;position:fixed;inset:0;align-items:center;justify-content:center;z-index:5}
+#emod{position:fixed;inset:0;z-index:99;background:rgba(0,0,0,.55);overflow:auto;padding:14px}
+@media(max-width:640px){body{padding:6px}.sec{padding:16px 12px}header{padding:12px}th,td{padding:6px}.tw{-webkit-overflow-scrolling:touch}}
+.orb{animation:none;filter:blur(50px)}header{animation:none}.stat{cursor:pointer;transition:transform .15s}.stat:hover{transform:translateY(-2px)}
+</style>
+</head>
+<body>
+<div class="orb o1"></div><div class="orb o2"></div><div id="ldr"><i class="sp" style="width:34px;height:34px;border-width:4px"></i></div>
+<div class="c">
+<header><div class="hd"><span id="hl"></span><div><h1 id="hT"></h1><p id="hS"></p><span class="pill"><i class="dot" id="dot"></i><span id="pst">...</span></span></div></div>
+<div class="nav"><select id="lsel" class="ls" aria-label="Language"><option value="en">English</option><option value="bn">বাংলা</option><option value="hi">हिन्दी</option></select><button class="b bo" id="nP" data-i18n="nP">Portal</button><button class="b bo" id="nA" data-i18n="nA">Admin Panel</button></div></header>
+<div id="siteoff" class="bad hide" style="margin:16px;text-align:center"></div>
+<div id="cfgerr" class="bad hide" data-i18n="cfgerr">Paste your Google Apps Script URL in the API line at the top of the script.</div>
+
+<div id="portal">
+ <div class="tabs"><button class="tab on" id="t1" data-i18n="t1">Register</button><button class="tab" id="t2" data-i18n="t2">Retrieve</button></div>
+ <div class="sec">
+  <div id="v1"><h2 data-i18n="rh">Student Registration</h2><p class="s" data-i18n="rs">Enter details. One mobile number can register only once.</p>
+   <div id="closed" class="bad hide" data-i18n="closed">Registration is currently closed.</div>
+   <div class="g hide" id="evg"><label data-i18n="evl">CERTIFICATE / EVENT</label><select id="evs"></select></div>
+   <div class="g"><label data-i18n="nml">FULL NAME</label><input id="nm" inputmode="text" autocomplete="name" spellcheck="false" data-ph="nmph" placeholder="Full name"></div>
+   <div class="g"><label data-i18n="mbl">MOBILE NUMBER</label><input id="mb" type="tel" inputmode="numeric" maxlength="10" data-ph="mbph" placeholder="10-digit mobile number"></div>
+   <div class="g hide" id="phg"><label data-i18n="phl">YOUR PHOTO (optional)</label><input id="ph" type="file" accept="image/*"><div id="crp" class="hide" style="margin-top:8px"><canvas id="cc" width="220" height="220" style="width:220px;max-width:100%;touch-action:none;border:1px solid var(--bd);border-radius:10px;cursor:grab"></canvas><div class="g"><label data-i18n="zl">ZOOM</label><input type="range" id="cz" min="100" max="400" value="100"></div><div class="g"><label>BRIGHTNESS</label><input type="range" id="cbr" min="60" max="140" value="100"></div><div class="g"><label>CONTRAST</label><input type="range" id="cct" min="60" max="140" value="100"></div><div class="g"><label>ROTATE</label><button type="button" class="b bo" id="crot">⟳ 90°</button></div><p class="s" data-i18n="cph">Drag the photo to choose the part you want to show.</p><p class="s" style="font-weight:700">Final preview (as it will appear on the certificate)</p><img id="cpv" alt="" style="width:110px;height:110px;object-fit:cover;border:1px solid var(--bd)"></div></div>
+   <div id="xf"></div><div class="err" id="e1"></div><button class="sb" id="reg" data-i18n="reg">Register &amp; Get Certificate</button></div>
+  <div id="v2" class="hide"><h2 data-i18n="qh">Retrieve Certificate</h2><p class="s" data-i18n="qs">Enter the registered mobile number.</p>
+   <div class="g"><label data-i18n="rql">MOBILE NUMBER OR CERTIFICATE ID</label><input id="rm" autocapitalize="characters" autocomplete="off"></div>
+   <div class="err" id="e2"></div><button class="sb" id="ret" data-i18n="ret">Find Certificate</button></div>
+  <div id="out"></div>
+ </div>
+ <div id="about"></div>
+</div>
+
+<div id="admin" class="hide"><div class="sec">
+ <div id="lg"><h2 data-i18n="lgh">Admin Login</h2><p class="s" data-i18n="lgs">Enter the admin password.</p>
+  <div class="g"><label data-i18n="pwl">PASSWORD</label><input id="pw" type="password"></div>
+  <div class="err" id="e3"></div><button class="sb" id="login" data-i18n="login">Login</button></div>
+ <div id="dash" class="hide">
+  <div class="act" style="margin:0 0 14px"><button class="b" id="tabS" data-i18n="tabS">Design &amp; Settings</button><button class="b bo" id="tabR" data-i18n="tabR">Students &amp; Downloads</button><button class="b bo" id="chpw" data-i18n="chpw">Change password</button><button class="b bo" id="lo" data-i18n="lo">Logout</button></div>
+  <div id="pS" class="pgrid"><div class="pl"><div id="form"></div><div class="act"><span id="sst" style="font-size:12px;align-self:center;font-weight:700"></span><button class="b" id="sv">Save Changes (to Google Sheet)</button><button class="b bo" id="rs">Reset Defaults</button></div></div><div class="pr"><div class="act" style="align-items:center;margin:0 0 6px"><b style="font-size:14px">Live Preview</b><button class="b bo" id="zo">−</button><span id="zv" style="font-size:12px">100%</span><button class="b bo" id="zi">+</button><button class="b bo" id="zr">Fit</button><button class="b bo" id="pvt">Hide / Show</button></div><div id="pv"></div></div></div>
+  
+  <div id="pR" class="hide"><div id="stats" class="stats"></div><p id="cnt" class="s"></p>
+   <div class="act" style="margin:0 0 8px"><button class="b" id="addst">+ Add student</button><button class="b" id="apall">Approve all pending</button><select id="zf" style="width:auto;font-size:12px;padding:8px"><option value="pdf">ZIP of PDFs</option><option value="jpg">ZIP of JPGs</option><option value="png">ZIP of PNGs</option></select><button class="b" id="zip">Download ZIP</button><button class="b" id="pall">All in one PDF</button><button class="b" id="rxl">⬇ All registration data (Excel)</button><button class="b bo" id="xls">Excel (as filtered)</button><button class="b" id="imp" onclick="document.getElementById('imf').click()">⬆ Import Excel/CSV</button><button class="b bo" id="csv">CSV</button><button class="b bo" id="clr">Clear All</button></div>
+   <p id="prog" style="font-size:12px;margin-bottom:6px"></p>
+   <div class="act" id="flt" style="margin:0 0 8px"></div><div class="act" style="margin:0 0 8px;align-items:center"><select id="xe" style="width:auto;font-size:12px;padding:8px"></select><input type="date" id="xd1" style="width:auto;font-size:12px;padding:6px"><input type="date" id="xd2" style="width:auto;font-size:12px;padding:6px"></div><input id="srch" placeholder="🔍 Search by name / ID / mobile" style="margin:0 0 8px"><div class="tw"><table><thead><tr><th data-i18n="thID">ID</th><th data-i18n="thName">Name</th><th data-i18n="thMob">Mobile</th><th data-i18n="thEv">Event</th><th data-i18n="thDate">Date</th><th data-i18n="thDet">Details</th><th data-i18n="thSt">Status</th><th data-i18n="thDl">Downloads</th><th>Last download</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>
+   <input type="file" id="pf" accept="image/*" class="hide"><input type="file" id="imf" accept=".xlsx,.xls,.csv" class="hide"><div id="aout" style="margin-top:14px"></div></div>
+ </div>
+</div></div>
+
+<footer><div class="th" id="fT"></div><div id="fC"></div><div class="act" style="justify-content:center"><button class="b bo" id="voice" data-i18n="voice">🔊 Play thank-you message</button></div></footer>
+</div>
+<div id="emod" class="hide"><div class="sec" style="max-width:520px;margin:0 auto;background:var(--card)"><h2>Edit applicant</h2><div id="ebody"></div><div class="err" id="eerr"></div><div class="act"><button class="b" id="esv">Save</button><button class="b bo" id="ecx">Cancel</button></div></div></div>
+<div id="pa"></div>
+
+<script>
+/* >>> PASTE YOUR GOOGLE APPS SCRIPT WEB APP URL BELOW <<< */
+var API="https://script.google.com/macros/s/AKfycbzYSNKhGF_NNRE9VpHuhTOzbx6QpYW1GidTTpc1I4vjcydA5XcvQkccB-cKiYTzM-a9/exec";
+
+var PW='',CUR=null,qc=0,RECS=[],PHT=null,CE=0,PI=null;
+var DEFE={active:'on',heading:'CERTIFICATE OF PARTICIPATION',intro:'This is to certify that',pre:'has successfully participated in the',event:'DENGUE AWARENESS CAMPAIGN',
+org:'organized by Rishi Bankim Chandra Evening College, NSS Unit–I.',note:'In recognition of active participation and valuable contribution towards social responsibility.',
+dateLabel:'Date',dateText:'',placeLabel:'Place',placeText:'Kolkata',size:'A4L',cw:'297',ch:'210',font:"'Noto Serif Bengali',Georgia,serif",color:'#8B1E1E',border:'#4a1515',borderStyle:'double',
+bgColor:'#ffffff',bgImage:'',bgFade:'60',photoOn:'off',photoShape:'round',photoSize:'90',qrPos:'center',qrSize:'90',idPrefix:'NSS',idMode:'serial',idStart:'1',idDigits:'4',idLast:'0000',logoL:'',logoC:'',logoR:'',
+sigs:[{t:'TEACHER-IN-CHARGE',s:'RBC EVENING COLLEGE',img:''},{t:'PROGRAMME OFFICER',s:'NSS UNIT–I',img:''}]};
+var BNF={heading_bn:'অংশগ্রহণ সার্টিফিকেট',intro_bn:'এই মর্মে প্রত্যয়ন করা যাচ্ছে যে',pre_bn:'সফলভাবে অংশগ্রহণ করেছেন',event_bn:'ডেঙ্গু সচেতনতা অভিযান',org_bn:'আয়োজক: ঋষি বঙ্কিম চন্দ্র ইভনিং কলেজ, এনএসএস ইউনিট–১',note_bn:'সক্রিয় অংশগ্রহণ ও সামাজিক দায়বদ্ধতায় মূল্যবান অবদানের স্বীকৃতিস্বরূপ।',dateLabel_bn:'তারিখ',placeLabel_bn:'স্থান',placeText_bn:'কলকাতা'};
+var SBN=[['শিক্ষক-ইনচার্জ','ঋষি বঙ্কিম চন্দ্র ইভনিং কলেজ'],['প্রোগ্রাম অফিসার','এনএসএস ইউনিট–১']];
+var HNF={heading_hi:'भागीदारी प्रमाणपत्र',intro_hi:'यह प्रमाणित किया जाता है कि',pre_hi:'ने सफलतापूर्वक भाग लिया',event_hi:'डेंगू जागरूकता अभियान',org_hi:'आयोजक: ऋषि बंकिम चंद्र इवनिंग कॉलेज, एनएसएस यूनिट–1',note_hi:'सक्रिय भागीदारी और सामाजिक उत्तरदायित्व में मूल्यवान योगदान के सम्मान में।',dateLabel_hi:'तारीख',placeLabel_hi:'स्थान',placeText_hi:'कोलकाता'};
+var SHI=[['शिक्षक-प्रभारी','ऋषि बंकिम चंद्र इवनिंग कॉलेज'],['कार्यक्रम अधिकारी','एनएसएस यूनिट–1']];
+DEFE.order=['logos','heading','intro','photo','name','extras','pre','event','org','note','date'];DEFE.hide={};DEFE.logos=[];DEFE.ts={};Object.assign(DEFE,{bgColor2:'#ffe9c9',bgGrad:'off',bgAngle:'135',bgPos:'center',bgSize:'cover',borderW:'1',dpStyle:'stack',dateShow:'on',placeShow:'on',qrBelow:'off',qrContent:'',qrName:'on',qrId:'on',qrEvent:'on',qrDate:'on',qrValid:'on',qrMobile:'off',qrExtra:'',idYear:'',logoAlign:'center'});DEFE.texts=[];
+var CURT='',CURA=0;
+var EVK=Object.keys(DEFE);
+var DEF={themeOn:'off',themeP:'#8B1E1E',themeP2:'#c0392b',themeAc:'#d4a017',themeBg:'#fcf9f2',themeCard:'#ffffff',themeTx:'#2d2a26',themeHT:'#ffffff',portalLogos:[],fonts:[],fields:[],gallery:[],aboutShow:'on',aboutTitle:'About this portal',aboutTitle_bn:'এই পোর্টাল সম্পর্কে',aboutTitle_hi:'इस पोर्टल के बारे में',aboutText:'Register for your participation certificate, download it instantly. The organisers can edit this text and add photos from the Admin Panel.',aboutText_bn:'অংশগ্রহণের সার্টিফিকেটের জন্য নিবন্ধন করুন, সঙ্গে সঙ্গে ডাউনলোড করুন এবং আইডি বা QR কোড দিয়ে যেকোনো সার্টিফিকেট যাচাই করুন। আয়োজকরা অ্যাডমিন প্যানেল থেকে এই লেখা বদলাতে ও ছবি যোগ করতে পারেন।',aboutText_hi:'भागीदारी प्रमाणपत्र के लिए पंजीकरण करें, तुरंत डाउनलोड करें और आईडी या QR कोड से किसी भी प्रमाणपत्र का सत्यापन करें। आयोजक एडमिन पैनल से यह लेख बदल सकते हैं और फ़ोटो जोड़ सकते हैं।',portalActive:'on',siteActive:'on',nameLang:'any',certLang:'en',autoApprove:'manual',fileName:'{name}-{id}',portalTitle:'OFFICIAL CERTIFICATE PORTAL',portalSub:'Rishi Bankim Chandra Evening College • NSS Unit-I',logoPortal:'',
+portalTitle_bn:'অফিসিয়াল সার্টিফিকেট পোর্টাল',portalTitle_hi:'आधिकारिक प्रमाणपत्र पोर्टल',portalSub_bn:'ঋষি বঙ্কিম চন্দ্র ইভনিং কলেজ • এনএসএস ইউনিট-১',portalSub_hi:'ऋषि बंकिम चंद्र इवनिंग कॉलेज • एनएसएस यूनिट-1',
+footerThanks:'Heartfelt thanks to everyone who participated.',footerThanks_bn:'অংশগ্রহণের জন্য সবাইকে আন্তরিক ধন্যবাদ।',footerThanks_hi:'भाग लेने के लिए सभी का हार्दिक धन्यवाद।',footerCopy_bn:'© {year} ঋষি বঙ্কিম চন্দ্র ইভনিং কলেজ, এনএসএস ইউনিট–১। সর্বস্বত্ব সংরক্ষিত।',footerCopy_hi:'© {year} ऋषि बंकिम चंद्र इवनिंग कॉलेज, एनएसएस यूनिट–1। सर्वाधिकार सुरक्षित।',footerCopy:'© {year} Rishi Bankim Chandra Evening College, NSS Unit-I. All rights reserved.',voiceUrl:'',voiceData:'',
+events:[Object.assign({id:'e1',name:'Dengue Awareness Campaign'},JSON.parse(JSON.stringify(DEFE)))]};
+var BN={portalTitle:'অফিসিয়াল সার্টিফিকেট পোর্টাল',footerThanks:'অংশগ্রহণের জন্য সবাইকে আন্তরিক ধন্যবাদ।',footerCopy:'© {year} ঋষি বঙ্কিম চন্দ্র ইভনিং কলেজ, এনএসএস ইউনিট–১। সর্বস্বত্ব সংরক্ষিত।'};
+var BNE={heading:'অংশগ্রহণ সার্টিফিকেট',intro:'এই মর্মে প্রত্যয়ন করা যাচ্ছে যে',pre:'সফলভাবে অংশগ্রহণ করেছেন',event:'ডেঙ্গু সচেতনতা অভিযান',org:'আয়োজক: ঋষি বঙ্কিম চন্দ্র ইভনিং কলেজ, এনএসএস ইউনিট–১',note:'সক্রিয় অংশগ্রহণ ও সামাজিক দায়বদ্ধতায় মূল্যবান অবদানের স্বীকৃতিস্বরূপ।',dateLabel:'তারিখ',placeLabel:'স্থান',placeText:'কলকাতা',font:"'Noto Serif Bengali',Georgia,serif"};
+var SIZES={A4L:[297,210],A4P:[210,297],A3L:[420,297],A3P:[297,420],A5L:[210,148],A5P:[148,210],LTL:[279,216],LTP:[216,279],SQ:[250,250]};
+var SZ=[['A4L','A4 Landscape'],['A4P','A4 Portrait'],['A3L','A3 Landscape'],['A3P','A3 Portrait'],['A5L','A5 Landscape'],['A5P','A5 Portrait'],['LTL','Letter Landscape'],['LTP','Letter Portrait'],['SQ','Square'],['C','Custom (mm below)']];
+var FG=[['Portal control',[['portalActive','Registration control – accept new applications','s',[['on','ON – registration open'],['off','OFF – registration closed']]],['siteActive','Official portal control – whole website','s',[['on','ON – website open'],['off','OFF – website closed for visitors (Admin still works)']]],['dlMode','Certificate download mode','s',[['instant','1. NORMAL / INSTANT – students download right after registering, no approval'],['approval','2. ADMIN APPROVAL – students can download only after I approve'],['manual','3. MANUAL – students cannot download; I download & hand over (ZIP / PDF)']]],['fileName','Download file name ({name} {id} {event})'],['nameLabel','Registration form: name label (any language, empty = default)'],['mobLabel','Registration form: mobile label (any language, empty = default)']]],
+['Portal (header)',[['portalTitle','Portal title (English)'],['portalTitle_bn','Portal title (বাংলা)'],['portalTitle_hi','Portal title (हिन्दी)'],['portalSub','Portal subtitle (English)'],['portalSub_bn','Portal subtitle (বাংলা)'],['portalSub_hi','Portal subtitle (हिन्दी)'],['img:logoPortal','Portal logo (header only)']]],
+['Portal colours (website theme)',[['themeOn','Use my own portal colours','s',[['off','No – default look (automatic light / dark)'],['on','Yes – use the colours below']]],['themeP','Main colour (header, buttons)','c'],['themeP2','Second colour (gradient)','c'],['themeAc','Accent colour (glow)','c'],['themeBg','Page background','c'],['themeCard','Card / panel background','c'],['themeTx','Text colour','c'],['themeHT','Header text colour (portal title, subtitle, buttons, status)','c']]],
+['About section (shown at the bottom of the portal)',[['aboutShow','Show the About section','s',[['on','Visible'],['off','Hidden']]],['aboutTitle','Title (English)'],['aboutTitle_bn','Title (বাংলা)'],['aboutTitle_hi','Title (हिन्दी)'],['aboutText','Description (English)','a'],['aboutText_bn','Description (বাংলা)','a'],['aboutText_hi','Description (हिन्दी)','a']]],
+['Footer text (below About – edited separately) & voice',[['footerThanks','Thank-you message (English)'],['footerThanks_bn','Thank-you message (বাংলা)'],['footerThanks_hi','Thank-you message (हिन्दी)'],['footerCopy','Copyright text (English) ({year} = current year)'],['footerCopy_bn','Copyright text (বাংলা)'],['footerCopy_hi','Copyright text (हिन्दी)'],['voiceUrl','Voice audio link (optional, .mp3)']]]];
+var FE=[['Certificate text',[['name','Event name (inside admin & registration list)'],['active','Open for registration','s',[['on','Yes'],['off','No']]],['heading','Heading'],['intro','Line above name'],['pre','Line before event'],['event','Certificate / event title'],['org','Organised-by line'],['note','Recognition note','a'],['dateLabel','Date label'],['dateText','Date on certificate (empty = date of download)'],['placeLabel','Place label'],['placeText','Place']]],
+['Extras: gradient, border, ID year, QR information, date & place',[['bgGrad','Background gradient','s',[['off','Off'],['on','On']]],['bgColor2','Gradient second colour','c'],['bgAngle','Gradient angle (degrees)'],['bgSize','Background image size','s',[['cover','Fill (cover)'],['contain','Fit (contain)'],['100% 100%','Stretch']]],['bgPos','Background image position','s',[['center','Center'],['top','Top'],['bottom','Bottom'],['left','Left'],['right','Right']]],['borderW','Border thickness (1 = normal, 2 = double)'],['idYear','Certificate ID year (empty = current year)'],['qrExtra','QR – your own extra lines (one line per row, any text, e.g. Certificate Valid / Issued by …). Empty = none','a'],['qrBelow','Put QR below the signatures','s',[['off','No'],['on','Yes']]],['dateShow','Show date','s',[['on','Show'],['off','Hide']]],['placeShow','Show place','s',[['on','Show'],['off','Hide']]],['dpStyle','Date & Place layout','s',[['stack','Date above Place, at the left'],['row','Side by side']]],['logoAlign','Extra logos alignment','s',[['center','Center'],['flex-start','Left'],['flex-end','Right'],['space-between','Spread']]]]],
+['Top logos (empty = none)',[['img:logoL','Left logo'],['img:logoC','Centre logo'],['img:logoR','Right logo']]],
+['Look, background & size',[['size','Paper size / orientation','s',SZ],['cw','Custom width (mm)'],['ch','Custom height (mm)'],
+ ['font','Font','s',fontList],
+ ['color','Name / accent colour','c'],['border','Border colour','c'],['borderStyle','Border style','s',[['double','Classic double'],['single','Single line'],['ornate','Ornate frame'],['modern','Modern side band'],['none','No border']]],
+ ['bgColor','Background colour','c'],['img:bgImage','Background image'],['bgFade','Background fade % (higher = lighter)'],
+ ['photoOn','Participant photo','s',[['off','Off'],['on','Ask for photo & show on certificate']]],['photoShape','Photo shape','s',[['round','Round'],['square','Square']]],['photoSize','Photo size (px)'],
+ ['qrPos','QR position','s',[['center','Centre, above signatures'],['tr','Top right'],['tl','Top left']]],['qrSize','QR size (px)']]],
+['Certificate ID',[['idPrefix','ID prefix (e.g. NSS)'],['idMode','ID type','s',[['serial','Serial (continues after the number below)'],['random','Random code']]],['idLast','Last used number – next certificate gets the NEXT number (58 → 59 · 001 → 002 · 01 → 02). Digits follow what you type.']]]];
+var S=JSON.parse(JSON.stringify(DEF));
+var TX={
+en:{nP:'Portal',nA:'Admin Panel',t1:'Register',t2:'Retrieve',t3:'Verify / Scan',t4:'About',rh:'Student Registration',rs:'Enter details. One mobile number can register only once.',closed:'Registration is currently closed.',evl:'CERTIFICATE / EVENT',nml:'FULL NAME',nmph:'Full name',mbl:'MOBILE NUMBER',mbph:'10-digit mobile number',phl:'YOUR PHOTO (optional)',reg:'Register & Get Certificate',qh:'Retrieve Certificate',qs:'Enter your registered mobile number or certificate ID.',rql:'MOBILE NUMBER OR CERTIFICATE ID',manNote:'Your certificate is ready. The organisers will hand it over to you.',zl:'ZOOM',qimg:'🖼 Scan from image',qnf:'No QR code found in this image.',cph:'Drag the photo to choose the part you want to show.',ret:'Find Certificate',vh:'Verify Certificate',vs:'Scan the QR code on the certificate to verify it.',vql:'CERTIFICATE ID OR MOBILE',vqph:'e.g. NSS-2026-0001',vbtn:'Verify',scan:'📷 Scan QR',stopscan:'Stop',voice:'🔊 Play thank-you message',cfgerr:'Paste your Google Apps Script URL in the API line at the top of the script.',act:'Portal ACTIVE',cls:'Registration CLOSED',
+eName:'Enter your full name using English letters only (A–Z).',eMob:'Enter a valid 10-digit mobile number starting with 6–9.',eNoEv:'No certificate is open for registration right now.',wait:'Please wait…',search:'Searching…',check:'Checking…',nf:'No registration found for this number.',pendR:'Your certificate is not ready yet. Please try again here after a little while.',inv:'✖ Certificate not found / not approved – INVALID',val:'✔ VALID CERTIFICATE',lName:'Name',lId:'ID',lEv:'Event',lIss:'Issued',rej:'Your registration was not approved. Please contact the organisers.',pend1:'✔ Registration received for',pend2:'. Your certificate will be available after admin approval. Come back to the Retrieve tab with your mobile number later.',cam:'Camera not available or permission denied (HTTPS needed).',aud:'Audio could not be played.',net:'Cannot reach the server. Check your internet connection and the API URL.',
+lgh:'Admin Login',lgs:'Enter the admin password.',pwl:'PASSWORD',login:'Login',tabS:'Design & Settings',tabR:'Students & Downloads',chpw:'Change password',lo:'Logout',wrongpw:'Incorrect password.',thID:'ID',thName:'Name',thMob:'Mobile',thEv:'Event',thDate:'Date',thSt:'Status',bView:'View',bApp:'Approve',bRej:'Reject',bEdit:'Edit',bPhoto:'Photo',bDel:'Delete',noRec:'No records yet.',cnt1:'registration(s)',cnt2:'pending approval',loading:'Loading…',eReq:'Please fill all required (*) fields.',thDet:'Details',thDl:'Downloads',stT:'Registered',stA:'Approved',stP:'Pending',stD:'Downloaded',stN:'Total downloads',sApproved:'Approved',sPending:'Pending',sRejected:'Rejected',nmph2:'Full name',eName2:'Please enter your full name correctly.',siteoff:'This website is temporarily closed by the administrator. Please visit again later.'},
+bn:{nP:'পোর্টাল',nA:'অ্যাডমিন প্যানেল',t1:'নিবন্ধন',t2:'সার্টিফিকেট খুঁজুন',t3:'যাচাই / স্ক্যান',t4:'আমাদের সম্পর্কে',rh:'শিক্ষার্থী নিবন্ধন',rs:'তথ্য দিন। একটি মোবাইল নম্বর দিয়ে শুধু একবারই নিবন্ধন করা যাবে।',closed:'নিবন্ধন বর্তমানে বন্ধ আছে।',evl:'সার্টিফিকেট / ইভেন্ট',nml:'পূর্ণ নাম',nmph:'পূর্ণ নাম',mbl:'মোবাইল নম্বর',mbph:'১০ সংখ্যার মোবাইল নম্বর',phl:'আপনার ছবি (ঐচ্ছিক)',reg:'নিবন্ধন করুন ও সার্টিফিকেট নিন',qh:'সার্টিফিকেট খুঁজুন',qs:'নিবন্ধিত মোবাইল নম্বর বা সার্টিফিকেট আইডি দিন।',rql:'মোবাইল নম্বর বা সার্টিফিকেট আইডি',manNote:'আপনার সার্টিফিকেট প্রস্তুত। আয়োজকরা সেটি আপনাকে দেবেন।',zl:'জুম',qimg:'🖼 ছবি থেকে স্ক্যান',qnf:'এই ছবিতে QR কোড পাওয়া যায়নি।',cph:'ছবির কোন অংশ দেখাবে তা টেনে ঠিক করুন।',ret:'সার্টিফিকেট খুঁজুন',vh:'সার্টিফিকেট যাচাই',vs:'যাচাই করতে সার্টিফিকেটের QR কোড স্ক্যান করুন।',vql:'সার্টিফিকেট আইডি বা মোবাইল',vqph:'যেমন NSS-2026-0001',vbtn:'যাচাই করুন',scan:'📷 QR স্ক্যান',stopscan:'বন্ধ',voice:'🔊 ধন্যবাদ বার্তা শুনুন',cfgerr:'স্ক্রিপ্টের শুরুতে API লাইনে আপনার Google Apps Script URL বসান।',act:'পোর্টাল সক্রিয়',cls:'নিবন্ধন বন্ধ',
+eName:'শুধু ইংরেজি অক্ষরে (A–Z) আপনার পূর্ণ নাম লিখুন।',eMob:'৬–৯ দিয়ে শুরু হওয়া সঠিক ১০ সংখ্যার মোবাইল নম্বর দিন।',eNoEv:'এই মুহূর্তে কোনো সার্টিফিকেটের নিবন্ধন খোলা নেই।',wait:'অনুগ্রহ করে অপেক্ষা করুন…',search:'খোঁজা হচ্ছে…',check:'যাচাই হচ্ছে…',nf:'এই নম্বরে কোনো নিবন্ধন পাওয়া যায়নি।',pendR:'আপনার সার্টিফিকেট এখনো তৈরি হয়নি। আরও কিছুক্ষণ পরে এখানে চেষ্টা করুন।',inv:'✖ সার্টিফিকেট পাওয়া যায়নি / অনুমোদিত নয় – অবৈধ',val:'✔ বৈধ সার্টিফিকেট',lName:'নাম',lId:'আইডি',lEv:'ইভেন্ট',lIss:'প্রদানের তারিখ',rej:'আপনার নিবন্ধন অনুমোদিত হয়নি। অনুগ্রহ করে আয়োজকদের সাথে যোগাযোগ করুন।',pend1:'✔ নিবন্ধন গ্রহণ করা হয়েছে:',pend2:'। অ্যাডমিন অনুমোদনের পর আপনার সার্টিফিকেট পাওয়া যাবে। পরে মোবাইল নম্বর দিয়ে “সার্টিফিকেট খুঁজুন” ট্যাবে ফিরে আসুন।',cam:'ক্যামেরা পাওয়া যায়নি বা অনুমতি দেওয়া হয়নি (HTTPS প্রয়োজন)।',aud:'অডিও চালানো যায়নি।',net:'সার্ভারে সংযোগ করা যাচ্ছে না। ইন্টারনেট সংযোগ ও API URL পরীক্ষা করুন।',
+lgh:'অ্যাডমিন লগইন',lgs:'অ্যাডমিন পাসওয়ার্ড দিন।',pwl:'পাসওয়ার্ড',login:'লগইন',tabS:'ডিজাইন ও সেটিংস',tabR:'শিক্ষার্থী ও ডাউনলোড',chpw:'পাসওয়ার্ড বদলান',lo:'লগআউট',wrongpw:'ভুল পাসওয়ার্ড।',thID:'আইডি',thName:'নাম',thMob:'মোবাইল',thEv:'ইভেন্ট',thDate:'তারিখ',thSt:'অবস্থা',bView:'দেখুন',bApp:'অনুমোদন',bRej:'বাতিল',bEdit:'সম্পাদনা',bPhoto:'ছবি',bDel:'মুছুন',noRec:'এখনও কোনো রেকর্ড নেই।',cnt1:'টি নিবন্ধন',cnt2:'টি অনুমোদনের অপেক্ষায়',loading:'লোড হচ্ছে…',eReq:'অনুগ্রহ করে সব আবশ্যিক (*) তথ্য পূরণ করুন।',thDet:'তথ্য',thDl:'ডাউনলোড',stT:'নিবন্ধিত',stA:'অনুমোদিত',stP:'অপেক্ষমাণ',stD:'ডাউনলোড করেছে',stN:'মোট ডাউনলোড',sApproved:'অনুমোদিত',sPending:'অপেক্ষমাণ',sRejected:'বাতিল',nmph2:'পূর্ণ নাম',eName2:'অনুগ্রহ করে সঠিকভাবে আপনার পূর্ণ নাম লিখুন।',siteoff:'এই ওয়েবসাইটটি এই মুহূর্তে অ্যাডমিন কর্তৃক বন্ধ রাখা হয়েছে। অনুগ্রহ করে পরে আবার দেখুন।'},
+hi:{nP:'पोर्टल',nA:'एडमिन पैनल',t1:'पंजीकरण',t2:'प्रमाणपत्र खोजें',t3:'सत्यापन / स्कैन',t4:'हमारे बारे में',rh:'विद्यार्थी पंजीकरण',rs:'विवरण भरें। एक मोबाइल नंबर से केवल एक बार पंजीकरण हो सकता है।',closed:'पंजीकरण फ़िलहाल बंद है।',evl:'प्रमाणपत्र / इवेंट',nml:'पूरा नाम',nmph:'पूरा नाम',mbl:'मोबाइल नंबर',mbph:'10 अंकों का मोबाइल नंबर',phl:'आपकी फ़ोटो (वैकल्पिक)',reg:'पंजीकरण करें और प्रमाणपत्र पाएँ',qh:'प्रमाणपत्र खोजें',qs:'पंजीकृत मोबाइल नंबर या प्रमाणपत्र आईडी दर्ज करें।',rql:'मोबाइल नंबर या प्रमाणपत्र आईडी',manNote:'आपका प्रमाणपत्र तैयार है। आयोजक इसे आपको सौंपेंगे।',zl:'ज़ूम',qimg:'🖼 फ़ोटो से स्कैन',qnf:'इस फ़ोटो में QR कोड नहीं मिला।',cph:'फ़ोटो का कौन-सा हिस्सा दिखे, यह खींचकर तय करें।',ret:'प्रमाणपत्र खोजें',vh:'प्रमाणपत्र सत्यापन',vs:'सत्यापन के लिए प्रमाणपत्र का QR कोड स्कैन करें।',vql:'प्रमाणपत्र आईडी या मोबाइल',vqph:'जैसे NSS-2026-0001',vbtn:'सत्यापित करें',scan:'📷 QR स्कैन',stopscan:'रोकें',voice:'🔊 धन्यवाद संदेश सुनें',cfgerr:'स्क्रिप्ट की शुरुआत में API लाइन में अपना Google Apps Script URL चिपकाएँ।',act:'पोर्टल सक्रिय',cls:'पंजीकरण बंद',
+eName:'कृपया केवल अंग्रेज़ी अक्षरों (A–Z) में अपना पूरा नाम लिखें।',eMob:'6–9 से शुरू होने वाला सही 10 अंकों का मोबाइल नंबर दर्ज करें।',eNoEv:'अभी किसी प्रमाणपत्र के लिए पंजीकरण खुला नहीं है।',wait:'कृपया प्रतीक्षा करें…',search:'खोजा जा रहा है…',check:'जाँच हो रही है…',nf:'इस नंबर पर कोई पंजीकरण नहीं मिला।',pendR:'आपका प्रमाणपत्र अभी तैयार नहीं हुआ है। कृपया कुछ देर बाद यहीं दोबारा प्रयास करें।',inv:'✖ प्रमाणपत्र नहीं मिला / स्वीकृत नहीं – अमान्य',val:'✔ मान्य प्रमाणपत्र',lName:'नाम',lId:'आईडी',lEv:'इवेंट',lIss:'जारी तिथि',rej:'आपका पंजीकरण स्वीकृत नहीं हुआ। कृपया आयोजकों से संपर्क करें।',pend1:'✔ पंजीकरण प्राप्त हुआ:',pend2:'। एडमिन की स्वीकृति के बाद आपका प्रमाणपत्र उपलब्ध होगा। बाद में अपने मोबाइल नंबर के साथ “प्रमाणपत्र खोजें” टैब पर लौटें।',cam:'कैमरा उपलब्ध नहीं है या अनुमति नहीं मिली (HTTPS आवश्यक)।',aud:'ऑडियो नहीं चल सका।',net:'सर्वर से संपर्क नहीं हो पा रहा। इंटरनेट कनेक्शन और API URL जाँचें।',
+lgh:'एडमिन लॉगिन',lgs:'एडमिन पासवर्ड दर्ज करें।',pwl:'पासवर्ड',login:'लॉगिन',tabS:'डिज़ाइन और सेटिंग्स',tabR:'विद्यार्थी और डाउनलोड',chpw:'पासवर्ड बदलें',lo:'लॉगआउट',wrongpw:'गलत पासवर्ड।',thID:'आईडी',thName:'नाम',thMob:'मोबाइल',thEv:'इवेंट',thDate:'तारीख',thSt:'स्थिति',bView:'देखें',bApp:'स्वीकृत करें',bRej:'अस्वीकार',bEdit:'संपादित करें',bPhoto:'फ़ोटो',bDel:'हटाएँ',noRec:'अभी कोई रिकॉर्ड नहीं।',cnt1:'पंजीकरण',cnt2:'स्वीकृति के लिए लंबित',loading:'लोड हो रहा है…',eReq:'कृपया सभी आवश्यक (*) जानकारी भरें।',thDet:'विवरण',thDl:'डाउनलोड',stT:'पंजीकृत',stA:'स्वीकृत',stP:'लंबित',stD:'डाउनलोड किया',stN:'कुल डाउनलोड',sApproved:'स्वीकृत',sPending:'लंबित',sRejected:'अस्वीकृत',nmph2:'पूरा नाम',eName2:'कृपया अपना पूरा नाम सही लिखें।',siteoff:'यह वेबसाइट अभी एडमिन द्वारा बंद की गई है। कृपया बाद में पुनः पधारें।'}};
+var UL='en';try{var _u=localStorage.getItem('ul');if(_u&&TX[_u])UL=_u}catch(e){}
+function tr(k){return (TX[UL]&&TX[UL][k])||TX.en[k]||k}
+function PT(k){return UL!=='en'&&S[k+'_'+UL]?S[k+'_'+UL]:S[k]}
+function evT(r){var T=tpl(r),k='event_'+UL;return UL!=='en'&&T[k]?T[k]:T.event}
+function certLang(){return 'en'}
+function $(i){return document.getElementById(i)}
+function esc(t){return String(t==null?'':t).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]})}
+function img(u){return u?'<img src="'+u+'" alt="">':''}
+function api(a,d){d=d||{};d.action=a;d.pw=PW;if(a==='saveSettings'&&d.settings){d.settings.autoApprove=d.settings.dlMode==='approval'?'manual':'auto';d.settings=idOut(d.settings)}return fetch(API,{method:'POST',body:JSON.stringify(d)}).then(function(r){return r.json()}).catch(function(){return{ok:false,error:tr('net')}})}
+function load(m){return '<p><i class="sp"></i>'+m+'</p>'}
+function mig(o){var n=Object.assign(JSON.parse(JSON.stringify(DEF)),o||{});
+ if(!n.dlMode)n.dlMode=n.autoApprove==='auto'?'instant':'approval';
+ if(!n.events||!n.events.length){var e={id:'e1',name:(o&&o.event)||'Event 1'};EVK.forEach(function(k){e[k]=(o&&o[k]!==undefined)?o[k]:JSON.parse(JSON.stringify(DEFE[k]))});n.events=[e]}n.events=n.events.map(function(e){e=Object.assign({},e);if(e.idLast==null||e.idLast==='')e.idLast=idDerive(Object.assign({},DEFE,e));return Object.assign(JSON.parse(JSON.stringify(DEFE)),e)});return n}
+function E(){return S.events[CE]||S.events[0]}
+function evOf(r){var v=S.events||[];return v.filter(function(e){return e.id===r.event})[0]||v.filter(function(e){return e.name===r.event})[0]||v[0]||{}}
+function tpl(r){return Object.assign({},DEFE,evOf(r))}
+function activeEv(){return S.events.filter(function(e){return e.active!=='off'})}
+function shade(h){var n=parseInt(String(h).replace('#',''),16)||0;return 'rgb('+Math.round((n>>16&255)*.6)+','+Math.round((n>>8&255)*.6)+','+Math.round((n&255)*.6)+')'}
+function applyTheme(){var r=document.documentElement.style,m={themeP:'--p',themeP2:'--p2',themeAc:'--ac',themeBg:'--bg',themeCard:'--card',themeTx:'--tx',themeHT:'--ht'},on=S.themeOn==='on';Object.keys(m).forEach(function(k){if(on&&S[k])r.setProperty(m[k],S[k]);else r.removeProperty(m[k])});
+ ['--pd','--soft','--bd','--mu'].forEach(function(v){r.removeProperty(v)});
+ if(on){r.setProperty('--pd',shade(S.themeP));r.setProperty('--soft','color-mix(in srgb,var(--card) 90%,var(--p))');r.setProperty('--bd','color-mix(in srgb,var(--tx) 14%,var(--card))');r.setProperty('--mu','color-mix(in srgb,var(--tx) 65%,var(--card))')}}
+function applyPortal(){applyTheme();applyFonts();$('hl').innerHTML=img(S.logoPortal)+(S.portalLogos||[]).map(function(g){return '<img src="'+g.img+'" style="height:'+(g.h||48)+'px;margin-right:8px;object-fit:contain;vertical-align:middle">'}).join('');$('hT').textContent=PT('portalTitle');$('hS').textContent=PT('portalSub');document.title=PT('portalTitle');
+ var on=S.portalActive!=='off';$('dot').className='dot'+(on?'':' off');$('pst').textContent=on?tr('act'):tr('cls');$('closed').classList.toggle('hide',on);$('reg').disabled=!on;
+ var a=activeEv(),sel=$('evs'),cv=sel.value;sel.innerHTML=a.map(function(e){return '<option value="'+esc(e.id)+'">'+esc(e.name)+'</option>'}).join('');if(cv)sel.value=cv;$('evg').classList.toggle('hide',a.length<2);
+ var cur=a.filter(function(e){return e.id===sel.value})[0]||a[0]||{};$('phg').classList.toggle('hide',cur.photoOn!=='on');if(cur.photoOn!=='on'){PHT=null}
+ $('fT').textContent=PT('footerThanks');$('fC').textContent=(PT('footerCopy')||'')
+ .replace('{year}',new Date().getFullYear());renderXF();renderAbout();setSite();$('nm').previousElementSibling.textContent=S.nameLabel||tr('nml');$('mb').previousElementSibling.textContent=S.mobLabel||tr('mbl')}
+var FKEY='';
+function applyFonts(){var k=(S.fonts||[]).map(function(f){return f.name+f.data.length}).join('|');if(k===FKEY)return;FKEY=k;var e=$('ufont');if(!e){e=document.createElement('style');e.id='ufont';document.head.appendChild(e)}e.textContent=(S.fonts||[]).map(function(f){return "@font-face{font-family:'"+f.name+"';src:url("+f.data+");font-display:swap}"}).join('')}
+function fontList(){return FONTS.concat((S.fonts||[]).map(function(f){return ["'"+f.name+"',serif",f.name+' (uploaded)']}))}
+function txHTML(t){if(!t.t)return '';return '<div style="white-space:pre-line;margin:.3em 0;line-height:1.5;font-size:'+(+t.fs||100)+'%;text-align:'+(t.al||'center')+';color:'+(t.c||'#333')+';'+(t.ff?'font-family:'+t.ff+';':'')+(t.b?'font-weight:'+t.b+';':'')+(t.i?'font-style:'+t.i+';':'')+'">'+esc(t.t)+'</div>'}
+function txLab(ev,k){var t=(ev.texts||[]).filter(function(x){return 'tx_'+x.id===k})[0];return '✎ '+String((t&&t.t)||'Text').slice(0,26)}
+function dlWhen(x){var v=x.dlAt||x.lastDl||x.dlDate||x.lastDownload;if(!v)return '—';var d=new Date(isNaN(v)?v:+v);return isNaN(d)?String(v):d.toLocaleString('en-GB')}
+function renderXF(){var old={};[].forEach.call(document.querySelectorAll('[data-xf]'),function(e){old[e.getAttribute('data-xf')]=e.value});var h='';
+ (S.fields||[]).forEach(function(f){var lb=(UL!=='en'&&f['label_'+UL])||f.label||'';h+='<div class="g"><label>'+esc(lb)+(f.req==='on'?' *':'')+'</label>'+(f.type==='select'?'<select data-xf="'+f.id+'"><option value="">—</option>'+(f.options||'').split(',').map(function(o){o=o.trim();return o?'<option>'+esc(o)+'</option>':''}).join('')+'</select>':'<input data-xf="'+f.id+'"'+(f.type==='date'?' type="date"':(f.type==='number'?' inputmode="numeric"':''))+'>')+'</div>'});
+ $('xf').innerHTML=h;[].forEach.call(document.querySelectorAll('[data-xf]'),function(e){if(old[e.getAttribute('data-xf')])e.value=old[e.getAttribute('data-xf')]})}
+function renderAbout(){var el=$('about'),g=S.gallery||[],ti=PT('aboutTitle'),tx=PT('aboutText');if(S.aboutShow==='off'||(!ti&&!tx&&!g.length)){el.innerHTML='';return}
+ el.innerHTML='<div class="sec" style="margin-top:14px">'+(ti?'<h2>'+esc(ti)+'</h2>':'')+(tx?'<p class="s" style="white-space:pre-line">'+esc(tx)+'</p>':'')+(g.length?'<div class="gal">'+g.map(function(x){return '<figure><img loading="lazy" src="'+x.img+'" alt="">'+(x.cap?'<figcaption>'+esc(x.cap)+'</figcaption>':'')+'</figure>'}).join('')+'</div>':'')+'</div>'}
+function applyLang(){document.documentElement.lang=UL;$('lsel').value=UL;
+ [].forEach.call(document.querySelectorAll('[data-i18n]'),function(e){e.textContent=tr(e.getAttribute('data-i18n'))});
+ [].forEach.call(document.querySelectorAll('[data-ph]'),function(e){e.placeholder=tr(e.getAttribute('data-ph'))});
+ applyPortal();if(RECS.length&&!$('pR').classList.contains('hide'))renderRecs()}
+$('lsel').onchange=function(){UL=this.value;try{localStorage.setItem('ul',UL)}catch(e){}applyLang()};
+$('evs').onchange=applyPortal;
+function dims(T){var m=T.size=='C'?[+T.cw||297,+T.ch||210]:(SIZES[T.size]||[297,210]);return{w:m[0],h:m[1],pw:Math.round(m[0]*3.7795),ph:Math.round(m[1]*3.7795)}}
+var TSK=['heading','intro','name','pre','event','org','note','date'],ZM=1;
+var QMAP={id:'qrId',name:'qrName',event:'qrEvent',date:'qrDate',mobile:'qrMobile',valid:'qrValid'};
+function qrKeys(T){var fs=((window.S||{}).fields||[]).map(function(f){return 'f:'+f.id}),def=['id','name','event','date','mobile'].concat(fs,['valid','extra']),cur=(T.qrOrder||[]).filter(function(k){return def.indexOf(k)>=0}),out=cur.slice();
+def.forEach(function(k){if(out.indexOf(k)<0){if(k.indexOf('f:')==0){var iv=out.indexOf('valid');if(iv<0)out.push(k);else out.splice(iv,0,k)}else out.push(k)}});return out}
+function qrOn(T,k){if(k==='extra')return true;if(k.indexOf('f:')==0){var f=((window.S||{}).fields||[]).filter(function(x){return 'f:'+x.id===k})[0];return !!f&&f.onQr==='on'}var m=QMAP[k],v=T[m];return (k==='date'||k==='mobile')?v==='on':v!=='off'}
+function qrText(r){var T=tpl(r),L=[];
+qrKeys(T).forEach(function(k){if(!qrOn(T,k))return;
+ if(k==='id')L.push('Certificate ID: '+r.id);
+ else if(k==='name')L.push('Name: '+(r.name||''));
+ else if(k==='event'){if(T.event)L.push('Event: '+T.event)}
+ else if(k==='date'){var dq=String(T.dateText||new Date().toLocaleDateString('en-GB')).trim();if(dq)L.push('Date: '+dq)}
+ else if(k==='mobile'){if(r.mobile)L.push('Mobile: '+r.mobile)}
+ else if(k==='valid')L.push('Status: Certificate Valid');
+ else if(k==='extra')String(T.qrExtra||'').split(/\r?\n/).forEach(function(x){x=x.trim();if(x)L.push(x)});
+ else if(k.indexOf('f:')==0){var f=((window.S||{}).fields||[]).filter(function(x){return 'f:'+x.id===k})[0];if(f&&r.extra&&r.extra[f.id])L.push((f.label||'')+': '+r.extra[f.id])}});
+return L.length?L.join('\n'):String(r.id)} var DP={logos:[50,4,80],heading:[50,15,80],intro:[50,23,60],photo:[50,29,18],name:[50,39,70],extras:[50,48,70],pre:[50,54,70],event:[50,60,70],org:[50,66,70],note:[50,72,70],date:[50,77,70],sigs:[50,84,80],qr:[10,80,12]};
+function certHTML(r,qid,lang){r=Object.assign({},r,{date:dOnly(r.date)});var S=tpl(r),sx=lang==='bn'||lang==='hi'?'_'+lang:'',L=function(k){return sx&&S[k+sx]?S[k+sx]:S[k]},nm=lang==='bn'&&r.nameBn?r.nameBn:(lang==='hi'&&r.nameHi?r.nameHi:r.name),fnt=S.font,D=dims(S),fnt=fnt+",'Noto Serif Bengali','Noto Serif Devanagari','Noto Sans Arabic','Noto Sans',sans-serif",u=Math.min(D.pw,D.ph)/794,ev=L('event'),q=(+S.qrSize||90)*u,bs=S.borderStyle,bd;
+ var bu=u*(+S.borderW||1),bc=S.border,bdh='',pd=22*u+'px',AB='position:absolute;',Z=function(t,l,r2,b2,x){return '<div style="'+AB+'top:'+t+'px;left:'+l+'px;right:'+r2+'px;bottom:'+b2+'px;'+x+'"></div>'};
+ if(bs=='single'){bdh=Z(0,0,0,0,'border:'+4*bu+'px solid '+bc);pd=22*u+4*bu+'px'}
+ else if(bs=='ornate'){bdh=Z(0,0,0,0,'border:'+6*bu+'px solid '+bc)+Z(6*bu,6*bu,6*bu,6*bu,'border:'+4*bu+'px solid #fff')+Z(10*bu,10*bu,10*bu,10*bu,'border:'+2.5*bu+'px solid '+S.color);pd=22*u+6*bu+'px'}
+ else if(bs=='modern'){bdh=Z(0,0,0,0,'border:'+2*bu+'px solid '+bc)+'<div style="'+AB+'top:0;left:0;bottom:0;width:'+24*bu+'px;background:'+S.color+'"></div>';pd=(22*u+2*bu)+'px '+(22*u+2*bu)+'px '+(22*u+2*bu)+'px '+(22*u+24*bu)+'px'}
+ else if(bs=='none'){}
+ else{bdh=Z(0,0,0,0,'border:'+3*bu+'px solid '+bc)+Z(5*bu,5*bu,5*bu,5*bu,'border:'+3*bu+'px solid '+bc);pd=22*u+8*bu+'px'}
+ var lg=(S.logoL||S.logoC||S.logoR)?'<div class="cl"><div>'+img(S.logoL)+'</div><div>'+img(S.logoC)+'</div><div>'+img(S.logoR)+'</div></div>':'';
+ var xl=(S.logos||[]).filter(function(g){return g.img}).map(function(g){return '<img src="'+g.img+'" style="width:'+(g.w||80)*u+'px;height:'+(g.h?g.h*u+'px':'auto')+';object-fit:contain">'}).join('');if(xl)lg+='<div style="display:flex;justify-content:'+(S.logoAlign||'center')+';gap:'+10*u+'px;flex-wrap:wrap;align-items:center;margin:.2em 0">'+xl+'</div>';
+ var sg=(S.sigs||[]).filter(function(g){return g.on!=='off'}).map(function(g){var ih=(+g.ih||100)/100,cc=g.c?'color:'+g.c+';':'',jb=g.al==='left'?'flex-start':(g.al==='right'?'flex-end':'center');return '<div style="font-size:'+(+g.fs||100)+'%;text-align:'+(g.al||'center')+';'+cc+'"><div class="sgi" style="--ih:'+3*ih+'em;height:'+3*ih+'em;justify-content:'+jb+'">'+img(g.img)+'</div><div class="sg" style="'+(g.b==='n'?'font-weight:normal;':'')+cc+'">'+esc(sx&&g['t'+sx]?g['t'+sx]:g.t)+'</div><div style="font-size:.8em;color:#666;'+cc+'">'+esc(sx&&g['s'+sx]?g['s'+sx]:g.s)+'</div>'+(g.d?'<div style="font-size:.78em;color:#666;'+cc+'">'+esc(g.d)+'</div>':'')+'</div>'}).join('');
+ var pos=S.qrPos=='tr'?'position:absolute;top:'+14*u+'px;right:'+18*u+'px;margin:0':S.qrPos=='tl'?'position:absolute;top:'+14*u+'px;left:'+18*u+'px;margin:0':'';
+ var ps=(+S.photoSize||90)*u,rad=S.photoShape=='round'?'50%':'6px',ph='';
+ if(S.photoOn==='on'&&r.photo)ph=r.photo==='PH'?'<div style="width:'+ps+'px;height:'+ps+'px;border-radius:'+rad+';background:#ddd;align-self:center;margin:.3em auto;font-size:.6em;display:flex;align-items:center;justify-content:center;color:#777">PHOTO</div>':'<img src="'+r.photo+'" style="width:'+ps+'px;height:'+ps+'px;object-fit:cover;border-radius:'+rad+';border:2px solid '+S.color+';align-self:center;margin:.3em auto">';
+ var dt=S.dateShow==='off'?'':(S.dateText||new Date().toLocaleDateString('en-GB')),pt=S.placeShow==='off'?'':S.placeText,dp='';
+ if(dt||pt){dp=S.dpStyle==='row'?'<div style="display:flex;justify-content:space-between;gap:1em;font-size:.8em;margin-top:.9em;color:#333"><span>'+(dt?esc(L('dateLabel'))+': <b>'+esc(dt)+'</b>':'')+'</span><span>'+(pt?esc(L('placeLabel'))+': <b>'+esc(L('placeText'))+'</b>':'')+'</span></div>':'<div style="text-align:left;font-size:.85em;margin-top:.9em;color:#333;line-height:1.8">'+(dt?'<div>'+esc(L('dateLabel'))+': <b>'+esc(dt)+'</b></div>':'')+(pt?'<div>'+esc(L('placeLabel'))+': <b>'+esc(L('placeText'))+'</b></div>':'')+'</div>'}
+ var xs=(window.S.fields||[]).filter(function(f){return f.onCert==='on'&&r.extra&&r.extra[f.id]}).map(function(f){return esc(sx&&f['label'+sx]?f['label'+sx]:f.label)+': <b>'+esc(r.extra[f.id])+'</b>'}).join(' &nbsp;•&nbsp; '),hd=S.hide||{},
+ B={logos:lg,heading:'<div style="font-size:1.7em;font-weight:bold;letter-spacing:1px;margin:.2em 0">'+esc(L('heading'))+'</div>',intro:'<p style="font-style:italic;color:#555;margin-top:.4em">'+esc(L('intro'))+'</p>',photo:ph,
+ name:'<div style="font-size:2em;font-weight:bold;color:'+S.color+';border-bottom:1px solid #999;display:inline-block;align-self:center;padding:.05em .7em;margin:.3em 0">'+esc(nm)+'</div>',
+ extras:xs?'<div style="font-size:.85em;color:#333;margin:.2em 0">'+xs+'</div>':'',pre:'<p style="font-size:.9em;color:#333;line-height:1.6">'+esc(L('pre'))+'</p>',
+ event:'<p style="font-weight:bold;font-size:1.04em;margin:.3em 0;color:#333">“'+esc(ev)+'”</p>',org:'<p style="font-size:.9em;color:#333">'+esc(L('org'))+'</p>',note:'<p style="font-size:.78em;color:#666;margin-top:.5em">'+esc(L('note'))+'</p>',date:dp},
+ TXB=(S.texts||[]).forEach(function(t){B['tx_'+t.id]=txHTML(t)}),
+ body=(S.order||[]).filter(function(k){return !hd[k]}).map(function(k){return W(k,B[k])}).join('');
+ function W(k,h){if(!h)return '';var t=(S.ts||{})[k];if(!t||TSK.indexOf(k)<0)return h;return '<div data-b="'+k+'" style="'+(t.fs?'font-size:'+t.fs+'%;':'')+(t.al?'text-align:'+t.al+';':'')+'">'+h+'</div>'}
+ var tsc='';TSK.forEach(function(k){var t=(S.ts||{})[k];if(!t)return;var c='';if(t.ff)c+='font-family:'+t.ff+'!important;';if(t.c)c+='color:'+t.c+'!important;';if(t.b)c+='font-weight:'+t.b+'!important;';if(t.i)c+='font-style:'+t.i+'!important;';if(t.u)c+='text-decoration:'+t.u+'!important;';if(t.ls!==undefined&&t.ls!=='')c+='letter-spacing:'+t.ls+'px!important;';if(c)tsc+='[data-q="'+qid+'"] [data-b="'+k+'"],[data-q="'+qid+'"] [data-b="'+k+'"] *{'+c+'}'});
+ var man=S.manual==='on',qrh=hd.qr?'':'<div class="qr" style="'+(man?'margin:0':pos)+'"><div style="background:#fff;padding:'+Math.max(4,5*u)+'px;line-height:0"><div id="'+qid+'" style="width:'+q+'px;height:'+q+'px"></div></div>'+(hd.idno?'':'<div style="font-size:'+Math.max(8,11*u)+'px;line-height:1.35;margin-top:'+3*u+'px;color:#333;font-weight:bold;letter-spacing:.3px;white-space:nowrap;text-align:center">'+esc(r.id)+'</div>')+'</div>',sgh=sg&&!hd.sigs?'<div class="sgs">'+sg+'</div>':'';
+ if(man){var mp=S.pos||{};body=(S.order||[]).concat(['sigs','qr']).filter(function(k){return !hd[k]}).map(function(k){var h=k=='sigs'?sgh:(k=='qr'?qrh:W(k,B[k]));if(!h)return '';var p=mp[k]||{},d=DP[k]||[50,50,60],x=p.x!=null?p.x:d[0],y=p.y!=null?p.y:d[1],w=p.w!=null?p.w:d[2],sc=(p.s||100)/100;return '<div class="mel" data-el="'+k+'" style="position:absolute;left:'+x+'%;top:'+y+'%;width:'+w+'%;text-align:center;transform:translateX(-50%) scale('+sc+');transform-origin:top center">'+h+'</div>'}).join('')}
+ return '<div class="cert" data-q="'+qid+'" style="width:'+D.pw+'px;height:'+D.ph+'px;font-size:'+16*u+'px;font-family:'+fnt+';border:0;padding:'+pd+';background:'+(S.bgGrad==='on'?'linear-gradient('+(+S.bgAngle||135)+'deg,'+S.bgColor+','+S.bgColor2+')':S.bgColor)+'">'+
+ (S.bgImage?'<div style="position:absolute;inset:0;background:url('+S.bgImage+') '+(S.bgPos||'center')+'/'+(S.bgSize||'cover')+' no-repeat;opacity:'+(1-(+S.bgFade||0)/100)+'"></div>':'')+bdh+'<div class="ci"'+(man?' style="display:block"':'')+'>'+(tsc?'<style>'+tsc+'</style>':'')+body+
+ (man?'':(S.qrBelow==='on'?sgh+qrh:qrh+sgh))+'</div></div>'}
+function mkQR(r,id){var el=$(id);if(!el||!window.QRGen)return;var T=qrText(r),u=function(t){try{return unescape(encodeURIComponent(t))}catch(e){return t}};
+var tries=[T,T.replace(/^[^:\n]+: /gm,''),String(r.id)];
+for(var i=0;i<tries.length;i++)for(var lv=0;lv<2;lv++){try{var q=new QRGen(-1,lv===0?1:0);q.addData(u(tries[i]));q.make();var n=q.getModuleCount(),m=6,k=Math.max(2,Math.ceil(480/(n+2*m))),c=document.createElement('canvas');c.width=c.height=(n+2*m)*k;var x=c.getContext('2d');x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height);x.fillStyle='#000';for(var a=0;a<n;a++)for(var b=0;b<n;b++)if(q.isDark(a,b))x.fillRect((b+m)*k,(a+m)*k,k,k);c.style.imageRendering='pixelated';el.innerHTML='';el.appendChild(c);return}catch(e){}}}
+function show(r,t,act){CUR=r;CURT=t;CURA=act;var D=dims(tpl(r)),q='q'+(++qc),sc=Math.min(1,($(t).clientWidth||340)/D.pw)*(t=='pv'?ZM:1);
+ $(t).innerHTML='<div class="rv" style="max-width:100%;overflow:auto;border:1px solid var(--bd);border-radius:6px"><div style="width:'+D.pw*sc+'px;height:'+D.ph*sc+'px"><div style="width:'+D.pw+'px;transform:scale('+sc+');transform-origin:top left">'+certHTML(r,q,certLang())+'</div></div></div>'+
+ (act==1?'<div class="act"><button class="b" data-pdf="1">⬇ PDF</button><button class="b" data-jpg="1">⬇ JPG</button><button class="b bo" data-png="1">⬇ PNG</button><button class="b bo" data-prt="1">🖨 Print</button></div>':'');mkQR(r,q)}
+function snap(r,lang){$('pa').innerHTML=certHTML(r,'xq',lang||certLang());mkQR(r,'xq');var f=document.fonts&&document.fonts.ready?document.fonts.ready:Promise.resolve();
+ return f.then(function(){return new Promise(function(ok){setTimeout(function(){html2canvas($('pa').firstChild,{scale:2,useCORS:true,backgroundColor:'#fff'}).then(ok)},300)})})}
+function newPdf(D){return new jspdf.jsPDF({orientation:D.w>=D.h?'l':'p',unit:'mm',format:[D.w,D.h]})}
+function fname(r){return (S.fileName||'{name}-{id}').replace('{name}',r.name).replace('{id}',r.id).replace('{event}',tpl(r).event).replace(/[\\\/:*?"<>|]+/g,'_').trim()}
+function dl(u,n){var a=document.createElement('a');a.href=u;a.download=n;document.body.appendChild(a);a.click();a.remove()}
+document.addEventListener('click',function(e){var d=e.target.dataset;if(!CUR)return;var r=CUR;if(!PW&&(d.pdf||d.jpg||d.png))logDl(r);
+ if(d.prt){snap(r).then(function(c){var w=window.open('');if(!w)return;w.document.write('<title>Print</title><body style="margin:0"><img src="'+c.toDataURL('image/png')+'" style="width:100%">');w.document.close();setTimeout(function(){w.print()},500)})}
+ if(d.pdf)snap(r).then(function(c){var D=dims(tpl(r)),p=newPdf(D);p.addImage(c.toDataURL('image/jpeg',.95),'JPEG',0,0,D.w,D.h);p.save(fname(r)+'.pdf')});
+ if(d.jpg)snap(r).then(function(c){dl(c.toDataURL('image/jpeg',.95),fname(r)+'.jpg')});
+ if(d.png)snap(r).then(function(c){dl(c.toDataURL('image/png'),fname(r)+'.png')})});
+/* portal */
+function tab(n){[1,2].forEach(function(i){$('v'+i).classList.toggle('hide',i!=n);$('t'+i).classList.toggle('on',i==n)});$('out').innerHTML=''}
+$('t1').onclick=function(){tab(1)};$('t2').onclick=function(){tab(2)};
+$('nP').onclick=function(){$('portal').classList.remove('hide');$('admin').classList.add('hide');setSite()};
+$('nA').onclick=function(){$('admin').classList.remove('hide');$('portal').classList.add('hide')};
+function handle(rec,box,rt){if(rec.status==='Approved'||(rec.status==='Pending'&&S.dlMode!=='approval')){var mn=S.dlMode==='manual'&&!PW;show(rec,box,mn?2:true);if(mn)$(box).insertAdjacentHTML('beforeend','<div class="wait" style="margin-top:10px">'+tr('manNote')+'</div>')}
+ else if(rec.status==='Rejected')$(box).innerHTML='<div class="bad">'+tr('rej')+'</div>';
+ else $(box).innerHTML=rt?'<div class="wait">'+tr('pendR')+'</div>':'<div class="wait">'+tr('pend1')+' <b>'+esc(rec.name)+'</b>'+tr('pend2')+'</div>'}
+function readImg(f,cb,mw,type){var fr=new FileReader();fr.onload=function(){var im=new Image();im.onload=function(){var sc=Math.min(1,(mw||320)/im.width),c=document.createElement('canvas');c.width=im.width*sc;c.height=im.height*sc;var x=c.getContext('2d');if(type=='jpeg'){x.fillStyle='#fff';x.fillRect(0,0,c.width,c.height)}x.drawImage(im,0,0,c.width,c.height);cb(c.toDataURL(type=='jpeg'?'image/jpeg':'image/png',.75))};im.src=fr.result};fr.readAsDataURL(f)}
+var CI=null,CX=0,CY=0,CD=null;
+function cdraw(){var c=$('cc'),x=c.getContext('2d'),z=(+$('cz').value||100)/100,sc=Math.max(220/CI.width,220/CI.height)*z,w=CI.width*sc,h=CI.height*sc;CX=Math.min(0,Math.max(220-w,CX));CY=Math.min(0,Math.max(220-h,CY));x.fillStyle='#fff';x.fillRect(0,0,220,220);x.filter='brightness('+($('cbr').value||100)+'%) contrast('+($('cct').value||100)+'%)';x.drawImage(CI,CX,CY,w,h);x.filter='none';PHT=c.toDataURL('image/jpeg',.82);var pv=$('cpv');if(pv){pv.src=PHT;pv.style.borderRadius=(S.events&&(E().photoShape==='round'))?'50%':'6px'}}
+$('ph').onchange=function(){var f=this.files[0];PHT=null;$('crp').classList.add('hide');if(!f)return;var fr=new FileReader();fr.onload=function(){var im=new Image();im.onload=function(){CI=im;var b=Math.max(220/im.width,220/im.height);CX=(220-im.width*b)/2;CY=(220-im.height*b)/2;$('cz').value=100;$('crp').classList.remove('hide');cdraw()};im.src=fr.result};fr.readAsDataURL(f)};
+$('cz').oninput=$('cbr').oninput=$('cct').oninput=function(){if(CI)cdraw()};$('crot').onclick=function(){if(!CI)return;var t=document.createElement('canvas');t.width=CI.height;t.height=CI.width;var q=t.getContext('2d');q.translate(t.width/2,t.height/2);q.rotate(Math.PI/2);q.drawImage(CI,-CI.width/2,-CI.height/2);var im=new Image();im.onload=function(){CI=im;var b=Math.max(220/im.width,220/im.height);CX=(220-im.width*b)/2;CY=(220-im.height*b)/2;$('cz').value=100;cdraw()};im.src=t.toDataURL()};
+$('cc').onpointerdown=function(e){CD={x:e.clientX,y:e.clientY,cx:CX,cy:CY};try{this.setPointerCapture(e.pointerId)}catch(x){}};
+$('cc').onpointermove=function(e){if(!CD||!CI)return;var k=220/this.getBoundingClientRect().width;CX=CD.cx+(e.clientX-CD.x)*k;CY=CD.cy+(e.clientY-CD.y)*k;cdraw()};
+$('cc').onpointerup=$('cc').onpointercancel=function(){CD=null};
+/* name field: English letters only, always (independent of site language) */
+$('nm').oninput=function(){return;var l='any';var v=this.value.replace(new RegExp('[^'+NMC[l]+" .'-]",'g'),'');if(v!==this.value)this.value=v};
+['mb'].forEach(function(i){$(i).oninput=function(){var v=this.value.replace(/\D/g,'');if(v!==this.value)this.value=v}});
+$('reg').onclick=function(){var n=$('nm').value.trim().replace(/\s+/g,' '),m=$('mb').value.trim(),a=activeEv();
+ if(!a.length){$('e1').textContent=tr('eNoEv');return}
+ if(!nmOk(n)){$('e1').textContent=tr(('any')==='en'?'eName':'eName2');return}
+ if(!/^[6-9][0-9]{9}$/.test(m)){$('e1').textContent=tr('eMob');return}
+ var ex={},miss=false;(S.fields||[]).forEach(function(f){var el=document.querySelector('[data-xf="'+f.id+'"]'),v=el?el.value.trim():'';if(f.req==='on'&&!v)miss=true;if(v)ex[f.id]=v});
+ if(miss){$('e1').textContent=tr('eReq');return}
+ var eid=$('evs').value||a[0].id,ev=a.filter(function(e){return e.id===eid})[0]||a[0];
+ $('e1').innerHTML=load(tr('wait'));api('register',{name:n,mobile:m,extra:ex,eventId:ev.id,photo:ev.photoOn==='on'?PHT:''}).then(function(r){if(!r.ok){$('e1').textContent=r.error;return}$('e1').textContent='';handle(r.rec,'out')})};
+$('ret').onclick=function(){var q=$('rm').value.trim();if(!q)return;if(/^[0-9+\-\s.]+$/.test(q))q=q.replace(/\D/g,'').slice(-10);$('e2').innerHTML=load(tr('search'));
+ function fin(rec){$('e2').textContent='';handle(rec,'out',true)}
+ api('retrieve',{q:q,mobile:q}).then(function(r){if(r&&r.rec){fin(r.rec);return}api('verify',{q:q}).then(function(v){if(v&&v.rec)fin(v.rec);else{$('e2').textContent=tr('nf');$('out').innerHTML=''}})})};
+$('voice').onclick=function(){var u=S.voiceData||S.voiceUrl;if(u){new Audio(u).play().catch(function(){alert(tr('aud'))});return}
+ if(!window.speechSynthesis)return;var tx=PT('footerThanks'),ut=new SpeechSynthesisUtterance(tx);ut.lang={en:'en-IN',bn:'bn-IN',hi:'hi-IN'}[UL]||'en-IN';speechSynthesis.cancel();speechSynthesis.speak(ut)};
+/* admin form */
+function sampleId(){var e=E(),y=e.idYear||new Date().getFullYear(),pf=e.idPrefix?e.idPrefix+'-':'';if(e.idMode==='random')return pf+y+'-AB12CD';return pf+y+'-'+nextSerial(e)}
+function idDerive(e){var n=Math.max((parseInt(e.idStart)||1)-1,0),d=parseInt(e.idDigits)||4,t=String(n);while(t.length<d)t='0'+t;return t}
+function nextSerial(e){var s=String(e.idLast==null?'':e.idLast).replace(/\D/g,'');if(!s)s=idDerive(e);var t=String(parseInt(s,10)+1);while(t.length<s.length)t='0'+t;return t}
+function idOut(st){var c=JSON.parse(JSON.stringify(st));(c.events||[]).forEach(function(e){var s=String(e.idLast==null?'':e.idLast).replace(/\D/g,'');if(!s)return;e.idStart=nextSerial(e);e.idDigits=String(s.length)});return c}
+function pv(){setTimeout(showLU,0);show({id:sampleId(),name:'Student Name',date:new Date().toLocaleDateString('en-GB'),photo:'PH',nameBn:'শিক্ষার্থীর নাম',nameHi:'विद्यार्थी का नाम',extra:(function(){var o={};(S.fields||[]).forEach(function(f){o[f.id]='Sample'});return o})(),event:E().id},'pv',2);decoratePV();if(!NS)autoSave()}
+function fld(g,src,pre){var h='<details'+(g[0]=='Portal control'||g[0]=='Certificate text'?' open':'')+'><summary>'+g[0]+'</summary><div style="margin-top:12px">';
+ g[1].forEach(function(f){var k=f[0],t=f[2]||'t';
+  if(k.indexOf('img:')==0){k=k.slice(4);h+='<div class="g"><label>'+f[1].toUpperCase()+'</label><div class="im">'+img(src[k])+'<input type="file" accept="image/*" data-'+pre+'i="'+k+'"><button class="b bo" data-'+pre+'x="'+k+'">Remove</button></div></div>';return}
+  h+='<div class="g"><label>'+f[1].toUpperCase()+'</label>';
+  if(t=='c')h+='<input type="color" data-'+pre+'k="'+k+'" value="'+src[k]+'" style="height:44px;padding:2px">';
+  else if(t=='s')h+='<select data-'+pre+'k="'+k+'">'+(typeof f[3]=='function'?f[3]():f[3]).map(function(o){return '<option value="'+esc(o[0])+'"'+(src[k]==o[0]?' selected':'')+'>'+o[1]+'</option>'}).join('')+'</select>';
+  else if(t=='a')h+='<textarea rows="2" data-'+pre+'k="'+k+'">'+esc(src[k])+'</textarea>';
+  else h+='<input data-'+pre+'k="'+k+'" value="'+esc(src[k])+'">';h+='</div>'});return h+'</div></details>'}
+function so(c,l){return l.map(function(o){return '<option value="'+o[0]+'"'+(c==o[0]?' selected':'')+'>'+o[1]+'</option>'}).join('')}
+function fieldsHTML(){var h='<details open><summary>Registration form fields (data you collect)</summary><div style="margin-top:12px"><p class="s">Name &amp; Mobile are always collected. Add anything else (class, section, roll no, department…). Choose “Yes” in “On certificate” to print it on the certificate.</p>';
+ (S.fields||[]).forEach(function(f,n){var a=' data-fn="'+n+'" data-ff=';h+='<div class="sgb"><div class="g"><label>LABEL (ENGLISH)</label><input'+a+'"label" value="'+esc(f.label||'')+'"></div>'+
+ '<div class="g"><label>TYPE</label><select'+a+'"type">'+so(f.type,[['text','Text'],['number','Number'],['date','Date'],['select','Dropdown']])+'</select></div><div class="g"><label>DROPDOWN CHOICES (COMMA SEPARATED)</label><input'+a+'"options" value="'+esc(f.options||'')+'"></div>'+
+ '<div class="g"><label>REQUIRED?</label><select'+a+'"req">'+so(f.req,[['off','Optional'],['on','Required']])+'</select></div><div class="g"><label>ON CERTIFICATE?</label><select'+a+'"onCert">'+so(f.onCert,[['off','No – only for my records'],['on','Yes – print on certificate']])+'</select></div><div class="g"><label>IN QR CODE?</label><select'+a+'"onQr">'+so(f.onQr,[['off','No'],['on','Yes – include in QR code']])+'</select></div><div class="act"><button class="b bo" data-fr="'+n+'">Delete this field</button></div></div>'});
+ return h+'<button class="b" id="addfld">+ Add field</button></div></details>'}
+function galleryHTML(){var h='<details><summary>Photo gallery (shown in the About section)</summary><div style="margin-top:12px">';(S.gallery||[]).forEach(function(g,n){h+='<div class="sgb"><div class="im">'+img(g.img)+'</div><div class="g"><label>CAPTION (OPTIONAL)</label><input data-gn="'+n+'" value="'+esc(g.cap||'')+'"></div><button class="b bo" data-gx="'+n+'">Remove photo</button></div>'});
+ return h+'<div class="g"><label>ADD PHOTO</label><input type="file" accept="image/*" id="galadd"></div></div></details>'}
+var OL={logos:'Logos',heading:'Heading',intro:'Line above name',photo:'Student photo',name:'Student name',extras:'Extra fields (class, section…)',pre:'Line before event',event:'Event title',org:'Organised-by line',note:'Recognition note',date:'Date & place'};
+function qrOrderHTML(ev){var ks=qrKeys(ev),QL={id:'Certificate ID',name:'Name',event:'Event',date:'Date (the certificate Date you set)',mobile:'Mobile number',valid:'Status: Certificate Valid',extra:'My own extra lines (write them in Extras → QR)'};
+var h='<details open><summary>QR code – choose what shows &amp; the order</summary><div style="margin-top:12px"><p class="s">Tick = included in the QR. Use ↑ ↓ to set the order, top line is read first. Students\' own fields are ticked here too.</p>';
+ks.forEach(function(k,n){var lb=QL[k];if(!lb){var f=(S.fields||[]).filter(function(x){return 'f:'+x.id===k})[0];lb='Student data – '+(f&&f.label||k)}
+ h+='<div class="act" style="align-items:center;margin:0 0 6px"><label style="flex:1;font-size:13px">'+(k==='extra'?'':'<input type="checkbox" style="width:auto;margin-right:6px" data-qh="'+k+'"'+(qrOn(Object.assign({},DEFE,ev),k)?' checked':'')+'>')+lb+'</label><button class="b bo" data-qu="'+n+'">↑</button><button class="b bo" data-qd="'+n+'">↓</button></div>'});
+return h+'</div></details>'}
+function layoutHTML(ev){var h='<details><summary>Certificate layout – show / hide &amp; reorder</summary><div style="margin-top:12px"><div class="g"><label>LAYOUT MODE</label><select data-mn="1">'+so(ev.manual||'off',[['off','Automatic – elements flow top to bottom'],['on','MANUAL – drag &amp; place every element anywhere (mouse / touch)']])+'</select></div><p class="s">Tick = shown (nothing appears unless ticked). In automatic mode use ↑ ↓ to reorder. Colours, background, border, size and fonts are in the other groups.</p>';
+ (ev.order||[]).forEach(function(k,n){h+='<div class="act" style="align-items:center;margin:0 0 6px"><label style="flex:1;font-size:13px"><input type="checkbox" style="width:auto;margin-right:6px" data-oh="'+k+'"'+((ev.hide||{})[k]?'':' checked')+'>'+(OL[k]||(k.indexOf('tx_')==0?txLab(ev,k):k))+'</label><button class="b bo" data-ou="'+n+'">↑</button><button class="b bo" data-od="'+n+'">↓</button></div>'});
+ [['sigs','Signatures'],['qr','QR code'],['idno','Certificate ID number text (below QR)']].forEach(function(x){h+='<div style="margin:0 0 6px"><label style="font-size:13px"><input type="checkbox" style="width:auto;margin-right:6px" data-oh="'+x[0]+'"'+((ev.hide||{})[x[0]]?'':' checked')+'>'+x[1]+' (bottom)</label></div>'});return h+'<div id="selbox"></div><button class="b bo" id="pres">Reset manual positions</button></div></details>'}
+var FONTS=[['','Default'],["'Noto Serif Bengali',Georgia,serif",'Noto Serif Bengali (default)'],["'Noto Sans Bengali',Arial,sans-serif",'Noto Sans Bengali'],['Georgia,serif','Georgia'],["'Times New Roman',serif",'Times New Roman'],["'Playfair Display',serif",'Playfair Display'],["'Cinzel',serif",'Cinzel'],["'Great Vibes',cursive",'Great Vibes (script)'],["'Dancing Script',cursive",'Dancing Script'],["'Hind Siliguri',sans-serif",'Hind Siliguri (Bengali)'],["'Tiro Bangla',serif",'Tiro Bangla (Bengali)'],["'Baloo Da 2',cursive",'Baloo Da 2 (Bengali)'],["'Noto Serif Devanagari',serif",'Noto Serif Devanagari (Hindi)'],["'Lora',serif",'Lora'],["'Merriweather',serif",'Merriweather'],["'Montserrat',sans-serif",'Montserrat'],["'Poppins',sans-serif",'Poppins'],['Arial,sans-serif','Arial'],['Verdana,sans-serif','Verdana'],["'Courier New',monospace",'Courier New']];
+function tsHTML(ev){var h='<details><summary>Text styling – font, size, colour, bold, italic, underline, spacing, alignment</summary><div style="margin-top:12px"><p class="s">Each text has its own style. Empty / Default = keep the current look. Size is % of normal.</p>';
+ TSK.forEach(function(k){var t=(ev.ts||{})[k]||{},a=function(p){return ' data-ts="'+k+'|'+p+'"'};h+='<div class="sgb"><b>'+(OL[k]||k)+(k=='date'?' &amp; Place':'')+'</b><div class="g"><label>FONT</label><select'+a('ff')+'>'+so(t.ff||'',fontList())+'</select></div><div class="g"><label>SIZE %</label><input'+a('fs')+' value="'+esc(t.fs||'')+'" placeholder="100"></div><div class="g"><label>COLOUR</label><input type="color"'+a('c')+' value="'+(t.c||'#333333')+'" style="height:44px;padding:2px"></div><div class="g"><label>BOLD</label><select'+a('b')+'>'+so(t.b||'',[['','Default'],['bold','Bold'],['normal','Normal']])+'</select></div><div class="g"><label>ITALIC</label><select'+a('i')+'>'+so(t.i||'',[['','Default'],['italic','Italic'],['normal','Normal']])+'</select></div><div class="g"><label>UNDERLINE</label><select'+a('u')+'>'+so(t.u||'',[['','Default'],['underline','Underline'],['none','None']])+'</select></div><div class="g"><label>LETTER SPACING (PX)</label><input'+a('ls')+' value="'+esc(t.ls||'')+'" placeholder="0"></div><div class="g"><label>ALIGNMENT</label><select'+a('al')+'>'+so(t.al||'',[['','Default'],['left','Left'],['center','Center'],['right','Right']])+'</select></div><button class="b bo" data-tsr="'+k+'">Reset this text</button></div>'});
+ return h+'</div></details>'}
+function logoList(arr,w,key){return (arr||[]).map(function(g,n){return '<div class="sgb"><div class="im">'+img(g.img)+'</div><div class="g"><label>WIDTH (PX)</label><input data-'+key+'w="'+n+'" value="'+(g.w||80)+'"></div>'+(w?'<div class="g"><label>HEIGHT (PX, 0 = auto)</label><input data-'+key+'h="'+n+'" value="'+(g.h||0)+'"></div>':'')+'<div class="g"><label>REPLACE IMAGE</label><input type="file" accept="image/*" data-'+key+'r="'+n+'"></div><button class="b bo" data-'+key+'x="'+n+'">Delete logo</button></div>'}).join('')}
+function logosHTML(ev){return '<details open><summary>Logos at the top – add as many as you like (more than 3) – width, height, replace, delete</summary><div style="margin-top:12px">'+logoList(ev.logos,true,'l')+'<div class="g"><label>ADD LOGO</label><input type="file" accept="image/*" id="logoadd"></div></div></details>'}
+function portalLogosHTML(){var h='<details><summary>Portal header logos – unlimited</summary><div style="margin-top:12px">';(S.portalLogos||[]).forEach(function(g,n){h+='<div class="sgb"><div class="im">'+img(g.img)+'</div><div class="g"><label>HEIGHT (PX)</label><input data-plh="'+n+'" value="'+(g.h||48)+'"></div><div class="g"><label>REPLACE IMAGE</label><input type="file" accept="image/*" data-plr="'+n+'"></div><button class="b bo" data-plx="'+n+'">Delete logo</button></div>'});return h+'<div class="g"><label>ADD LOGO</label><input type="file" accept="image/*" id="pladd"></div></div></details>'}
+function fontsHTML(){var h='<details open><summary>Fonts – upload your own font (.ttf .otf .woff .woff2)</summary><div style="margin-top:12px"><p class="s">Uploaded fonts appear in every font list (certificate font, text styling, extra text). Max about 1.5 MB per font.</p>';(S.fonts||[]).forEach(function(f,n){h+='<div class="sgb"><div class="im"><b style="font-family:\''+f.name+'\'">'+esc(f.name)+' – AaBb কখগ</b><button class="b bo" data-fx="'+n+'">Delete</button></div></div>'});return h+'<div class="g"><label>ADD FONT FILE</label><input type="file" accept=".ttf,.otf,.woff,.woff2" id="fontadd"></div></div></details>'}
+function textsHTML(ev){var h='<details open><summary>Extra text – write anything in any language, add as many as you want</summary><div style="margin-top:12px"><p class="s">Move each text in “Certificate layout” (↑ ↓, or drag in manual mode). Choose any font, including your uploaded fonts.</p>';(ev.texts||[]).forEach(function(t,n){var a=function(p){return ' data-xt="'+n+'|'+p+'"'};h+='<div class="sgb"><div class="g"><label>TEXT</label><textarea rows="2"'+a('t')+'>'+esc(t.t)+'</textarea></div><div class="g"><label>FONT</label><select'+a('ff')+'>'+so(t.ff||'',fontList())+'</select></div><div class="g"><label>SIZE %</label><input'+a('fs')+' value="'+esc(t.fs||100)+'"></div><div class="g"><label>COLOUR</label><input type="color"'+a('c')+' value="'+(t.c||'#333333')+'" style="height:44px;padding:2px"></div><div class="g"><label>BOLD</label><select'+a('b')+'>'+so(t.b||'',[['','Normal'],['bold','Bold']])+'</select></div><div class="g"><label>ITALIC</label><select'+a('i')+'>'+so(t.i||'',[['','Normal'],['italic','Italic']])+'</select></div><div class="g"><label>ALIGN</label><select'+a('al')+'>'+so(t.al||'center',[['left','Left'],['center','Center'],['right','Right']])+'</select></div><button class="b bo" data-xtx="'+n+'">Delete this text</button></div>'});return h+'<button class="b" id="addtxt">+ Add text</button></div></details>'}
+function buildForm(){var h='<h2 style="font-size:14px;margin-bottom:8px">Portal settings</h2>',ev=E();FG.forEach(function(g){h+=fld(g,S,'')});
+ h+=fieldsHTML()+portalLogosHTML()+fontsHTML()+galleryHTML();
+ h+='<details open><summary>Voice message (your own voice)</summary><div style="margin-top:12px"><p class="s">Record a short thank-you in your own voice (max 25 seconds). Visitors hear it from the footer button.</p><div class="act" style="margin:0 0 8px"><button class="b" id="rec">● Record</button><button class="b bo" id="recx">Delete voice</button></div><div class="g"><label>OR UPLOAD AN AUDIO FILE (MAX ABOUT 1.5 MB)</label><input type="file" accept="audio/*" id="voicefile"></div><p id="recs" class="s">'+(S.voiceData?'Voice message saved ✔ (press Save Changes to publish)':'No recording yet')+'</p>'+(S.voiceData?'<audio controls src="'+S.voiceData+'" style="width:100%"></audio>':'')+'</div></details>';
+ h+='<h2 style="font-size:14px;margin:18px 0 8px">Certificates / Events</h2><div class="g"><label>EDITING EVENT</label><select id="evsel">'+S.events.map(function(e,i){return '<option value="'+i+'"'+(i==CE?' selected':'')+'>'+esc(e.name)+'</option>'}).join('')+'</select></div>'+
+ '<div class="act" style="margin:0 0 12px"><button class="b" id="evnew">+ New event</button><button class="b bo" id="evdup">Duplicate</button><button class="b bo" id="evdel">Delete</button></div>';
+ FE.forEach(function(g){h+=fld(g,ev,'e')});h+=textsHTML(ev)+qrOrderHTML(ev)+layoutHTML(ev)+tsHTML(ev)+logosHTML(ev);
+ h+='<details><summary>Signatures (add as many as you want)</summary><div style="margin-top:12px">';
+ (ev.sigs||[]).forEach(function(g,n){h+='<div class="sgb"><div class="g"><label>TITLE</label><input data-st="'+n+'" value="'+esc(g.t)+'"></div><div class="g"><label>SUB-LINE</label><input data-ss="'+n+'" value="'+esc(g.s)+'"></div><div class="g"><label>DEPARTMENT / INSTITUTION</label><input data-sdp="'+n+'" value="'+esc(g.d||'')+'"></div><div class="g"><label>SIGNATURE IMAGE SIZE %</label><input data-sih="'+n+'" value="'+(g.ih||100)+'"></div><div class="g"><label>TEXT SIZE %</label><input data-sfs="'+n+'" value="'+(g.fs||100)+'"></div><div class="g"><label>TEXT COLOUR</label><input type="color" data-sc="'+n+'" value="'+(g.c||'#444444')+'" style="height:44px;padding:2px"></div><div class="g"><label>BOLD</label><select data-sb="'+n+'">'+so(g.b||'b',[['b','Bold'],['n','Normal']])+'</select></div><div class="g"><label>ALIGN</label><select data-sal="'+n+'">'+so(g.al||'center',[['left','Left'],['center','Center'],['right','Right']])+'</select></div><div class="g"><label>SHOW</label><select data-son="'+n+'">'+so(g.on||'on',[['on','Show'],['off','Hide']])+'</select></div><div class="im">'+img(g.img)+'<input type="file" accept="image/*" data-si="'+n+'"><button class="b bo" data-sx="'+n+'">Remove image</button></div><div class="act"><button class="b bo" data-sr="'+n+'">Delete this signature</button></div></div>'});
+ h+='<button class="b" id="addsig">+ Add Signature</button></div></details>';$('form').innerHTML=h}
+var SEL='',LOADED=false,DIRTYOK=false,NS=0,SVT=null;
+function autoSave(){if(!LOADED||!DIRTYOK||!PW)return;PEND=true;SEQ++;clearTimeout(SVT);setSt('● Saving…','#8a5a00');SVT=setTimeout(doSave,1000)}
+function selPos(){var ev=E();ev.pos=ev.pos||{};var d=DP[SEL]||[50,50,60],p=ev.pos[SEL]||(ev.pos[SEL]={});if(p.x==null)p.x=d[0];if(p.y==null)p.y=d[1];if(p.w==null)p.w=d[2];if(p.s==null)p.s=100;return p}
+function selP(k,v){if(SEL)selPos()[k]=v}
+function decoratePV(){var b=$('pv');b.classList.toggle('dsg',E().manual==='on');if(SEL){var n=b.querySelector('[data-el="'+SEL+'"]');if(n)n.classList.add('sel')}}
+function updSel(){var b=$('selbox');if(!b)return;if(E().manual!=='on'){b.innerHTML='';return}
+ if(!SEL){b.innerHTML='<p class="s" style="margin:8px 0">Tap / click an element in the Live Preview, then drag it where you want. Size and width controls appear here.</p>';return}
+ var p=selPos();b.innerHTML='<p style="font-weight:bold;margin:8px 0">Selected: '+(OL[SEL]||(SEL=='sigs'?'Signatures':(SEL.indexOf('tx_')==0?'Extra text':'QR code')))+'</p><div class="g"><label>SIZE ('+p.s+'%)</label><input type="range" min="20" max="300" value="'+p.s+'" data-ps="1"></div><div class="g"><label>WIDTH ('+Math.round(p.w)+'%)</label><input type="range" min="5" max="100" value="'+p.w+'" data-pwd="1"></div><div class="act" style="margin-bottom:8px"><button class="b bo" data-pc="h">Center ↔</button><button class="b bo" data-pc="v">Center ↕</button><button class="b bo" data-pn="-0.5,0">←</button><button class="b bo" data-pn="0.5,0">→</button><button class="b bo" data-pn="0,-0.5">↑</button><button class="b bo" data-pn="0,0.5">↓</button></div>'}
+(function(){var pb=$('pv'),dr=null;
+ pb.addEventListener('pointerdown',function(e){if(E().manual!=='on')return;var el=e.target.closest&&e.target.closest('.mel');if(!el)return;e.preventDefault();SEL=el.getAttribute('data-el');var rc=el.closest('.ci').getBoundingClientRect(),p=selPos();dr={el:el,rc:rc,x0:p.x,y0:p.y,sx:e.clientX,sy:e.clientY,p:p};try{el.setPointerCapture(e.pointerId)}catch(x){}
+  [].forEach.call(pb.querySelectorAll('.mel.sel'),function(n){n.classList.remove('sel')});el.classList.add('sel');updSel()});
+ pb.addEventListener('pointermove',function(e){if(!dr)return;var x=dr.x0+(e.clientX-dr.sx)/dr.rc.width*100,y=dr.y0+(e.clientY-dr.sy)/dr.rc.height*100;dr.p.x=+Math.max(0,Math.min(100,x)).toFixed(1);dr.p.y=+Math.max(0,Math.min(100,y)).toFixed(1);dr.el.style.left=dr.p.x+'%';dr.el.style.top=dr.p.y+'%'});
+ function end(){if(dr){dr=null;updSel();autoSave()}}pb.addEventListener('pointerup',end);pb.addEventListener('pointercancel',end)})();
+function ref(){buildForm();applyPortal();pv();updSel()}
+$('form').addEventListener('input',function(e){var d=e.target.dataset,v=e.target.value;
+ if(d.k)S[d.k]=v;else if(d.ek){E()[d.ek]=v;if(d.ek=='name'){var o=$('evsel').options[CE];if(o)o.textContent=v}}else if(d.st!==undefined)E().sigs[+d.st].t=v;else if(d.ss!==undefined)E().sigs[+d.ss].s=v;else if(d.stb!==undefined)E().sigs[+d.stb].t_bn=v;else if(d.ssb!==undefined)E().sigs[+d.ssb].s_bn=v;else if(d.sth!==undefined)E().sigs[+d.sth].t_hi=v;else if(d.ssh!==undefined)E().sigs[+d.ssh].s_hi=v;else if(d.sdp!==undefined)E().sigs[+d.sdp].d=v;else if(d.sih!==undefined)E().sigs[+d.sih].ih=v;else if(d.sfs!==undefined)E().sigs[+d.sfs].fs=v;else if(d.sc!==undefined)E().sigs[+d.sc].c=v;else if(d.sb!==undefined)E().sigs[+d.sb].b=v;else if(d.sal!==undefined)E().sigs[+d.sal].al=v;else if(d.son!==undefined)E().sigs[+d.son].on=v;else if(d.xt!==undefined){var xa=d.xt.split('|');E().texts[+xa[0]][xa[1]]=v}else if(d.ts!==undefined){var ta=d.ts.split('|');E().ts=E().ts||{};(E().ts[ta[0]]=E().ts[ta[0]]||{})[ta[1]]=v}else if(d.lw!==undefined)E().logos[+d.lw].w=+v||80;else if(d.lh!==undefined)E().logos[+d.lh].h=+v||0;else if(d.plh!==undefined)S.portalLogos[+d.plh].h=+v||48;else if(d.fn!==undefined)S.fields[+d.fn][d.ff]=v;else if(d.gn!==undefined)S.gallery[+d.gn].cap=v;else if(d.ps!==undefined)selP('s',+v);else if(d.pwd!==undefined)selP('w',+v);else return;applyPortal();pv()});
+$('form').addEventListener('change',function(e){var d=e.target.dataset,f=e.target.files&&e.target.files[0],v=e.target.value;
+ if(e.target.id=='evsel'){CE=+v;ref();return}
+ if(d.mn!==undefined){E().manual=e.target.value;ref();return}
+ if(d.qh!==undefined){var qk=d.qh,qv=e.target.checked;if(qk.indexOf('f:')==0){(S.fields||[]).forEach(function(f){if('f:'+f.id===qk)f.onQr=qv?'on':'off'})}else if(QMAP[qk])E()[QMAP[qk]]=qv?'on':'off';ref();return}
+ if(d.oh!==undefined){E().hide=E().hide||{};E().hide[d.oh]=!e.target.checked;pv();return}
+ if(e.target.id=='voicefile'&&f){if(f.size>1600000){alert('Audio is too large (max about 1.5 MB). Use a shorter or compressed file.');return}var fr2=new FileReader();fr2.onload=function(){S.voiceData=fr2.result;ref()};fr2.readAsDataURL(f);return}
+ if(e.target.id=='fontadd'&&f){if(f.size>1500000){alert('Font too large (max about 1.5 MB).');return}var fr3=new FileReader();fr3.onload=function(){var fnm=f.name.replace(/\.[^.]+$/,'').replace(/[^\w\- ]+/g,'').trim()||('Font'+Date.now());S.fonts=S.fonts||[];S.fonts.push({name:fnm,data:fr3.result});ref()};fr3.readAsDataURL(f);return}
+ if(e.target.id=='logoadd'&&f){readImg(f,function(u){E().logos=E().logos||[];E().logos.push({img:u,w:80,h:0});ref()},400,'png');return}
+ if(d.lr!==undefined&&f){readImg(f,function(u){E().logos[+d.lr].img=u;ref()},400,'png');return}
+ if(e.target.id=='pladd'&&f){readImg(f,function(u){S.portalLogos=S.portalLogos||[];S.portalLogos.push({img:u,h:48});ref()},400,'png');return}
+ if(d.plr!==undefined&&f){readImg(f,function(u){S.portalLogos[+d.plr].img=u;ref()},400,'png');return}
+ if(e.target.id=='galadd'&&f){readImg(f,function(u){S.gallery=S.gallery||[];S.gallery.push({img:u,cap:''});ref()},700,'jpeg');return}
+ if(d.k){S[d.k]=v;applyPortal();pv()}if(d.ek){E()[d.ek]=v;applyPortal();pv()}
+ var bg=(d.ii||d.i)=='bgImage';
+ if(d.i&&f)readImg(f,function(u){S[d.i]=u;ref()});
+ if(d.ei&&f)readImg(f,function(u){E()[d.ei]=u;ref()},d.ei=='bgImage'?1100:320,d.ei=='bgImage'?'jpeg':'png');
+ if(d.si!==undefined&&f)readImg(f,function(u){E().sigs[+d.si].img=u;ref()})});
+var MR=null,RC=[];
+$('form').addEventListener('click',function(e){var d=e.target.dataset,id=e.target.id;
+ if(d.x){S[d.x]='';ref()}if(d.ex){E()[d.ex]='';ref()}if(d.sx!==undefined){E().sigs[+d.sx].img='';ref()}if(d.sr!==undefined){E().sigs.splice(+d.sr,1);ref()}
+ if(d.lx!==undefined){E().logos.splice(+d.lx,1);ref()}
+ if(d.plx!==undefined){S.portalLogos.splice(+d.plx,1);ref()}
+ if(d.tsr!==undefined){E().ts=E().ts||{};delete E().ts[d.tsr];ref()}
+ if(id==='pres'){E().pos={};SEL='';ref()}
+ if(d.pn!==undefined&&SEL){var nn=d.pn.split(','),pp=selPos();pp.x=+(pp.x+ +nn[0]).toFixed(1);pp.y=+(pp.y+ +nn[1]).toFixed(1);pv();updSel()}
+ if(d.pc!==undefined&&SEL){var p2=selPos();if(d.pc=='h')p2.x=50;else p2.y=50;pv();updSel()}
+ if(id==='addfld'){S.fields=S.fields||[];S.fields.push({id:'f'+Date.now(),label:'Class',label_bn:'শ্রেণি',label_hi:'कक्षा',type:'text',options:'',req:'off',onCert:'off',onQr:'off'});ref()}
+ if(d.fr!==undefined){S.fields.splice(+d.fr,1);ref()}
+ if(id==='addtxt'){var tid='t'+Date.now();E().texts=E().texts||[];E().texts.push({id:tid,t:'Your text',ff:'',fs:100,c:'#333333',b:'',i:'',al:'center'});E().order=E().order||[];E().order.push('tx_'+tid);ref()}
+ if(d.xtx!==undefined){var xt=E().texts.splice(+d.xtx,1)[0];E().order=(E().order||[]).filter(function(k){return k!=='tx_'+xt.id});ref()}
+ if(d.fx!==undefined){S.fonts.splice(+d.fx,1);ref()}
+ if(d.gx!==undefined){S.gallery.splice(+d.gx,1);ref()}
+ if(d.qu!==undefined||d.qd!==undefined){var qo=qrKeys(E()),qi=+(d.qu!==undefined?d.qu:d.qd),qm=d.qu!==undefined?qi-1:qi+1;if(qm>=0&&qm<qo.length){var qt=qo[qi];qo[qi]=qo[qm];qo[qm]=qt;E().qrOrder=qo;ref()}}
+ if(d.ou!==undefined||d.od!==undefined){var oo=E().order,ii=+(d.ou!==undefined?d.ou:d.od),mm=d.ou!==undefined?ii-1:ii+1;if(mm>=0&&mm<oo.length){var tt=oo[ii];oo[ii]=oo[mm];oo[mm]=tt;ref()}}
+ if(id==='addsig'){E().sigs=E().sigs||[];E().sigs.push({t:'NEW SIGNATORY',s:'',img:''});ref()}
+ if(id==='evnew'){var n=JSON.parse(JSON.stringify(DEFE));n.id='e'+Date.now();n.name='New event';n.sigs=JSON.parse(JSON.stringify(DEFE.sigs));S.events.push(n);CE=S.events.length-1;ref()}
+ if(id==='evdup'){var c=JSON.parse(JSON.stringify(E()));c.id='e'+Date.now();c.name+=' (copy)';S.events.push(c);CE=S.events.length-1;ref()}
+ if(id==='evdel'){if(S.events.length<2)return alert('At least one event is required.');if(confirm('Delete this event template? (Old certificates will use the first event.)')){S.events.splice(CE,1);CE=0;ref()}}
+ if(id==='recx'){S.voiceData='';ref()}
+ if(id==='rec'){if(MR&&MR.state=='recording'){MR.stop();return}
+  navigator.mediaDevices.getUserMedia({audio:true}).then(function(st){RC=[];MR=new MediaRecorder(st,{audioBitsPerSecond:24000});MR.ondataavailable=function(x){RC.push(x.data)};
+   MR.onstop=function(){st.getTracks().forEach(function(t){t.stop()});var fr=new FileReader();fr.onload=function(){S.voiceData=fr.result;$('rec').textContent='● Record';ref()};fr.readAsDataURL(new Blob(RC,{type:MR.mimeType}))};
+   MR.start();$('rec').textContent='■ Stop recording';$('recs').textContent='Recording… speak now';setTimeout(function(){if(MR&&MR.state=='recording')MR.stop()},25000)}).catch(function(){alert('Microphone not available or permission denied.')})}});
+$('sv').onclick=function(){$('sv').textContent='Saving…';api('saveSettings',{settings:S}).then(function(r){$('sv').textContent='Save Changes (to Google Sheet)';alert(r.ok?'Saved. Visible on all devices now.':'Error: '+r.error)})};
+$('pvt').onclick=function(){$('pv').classList.toggle('hide')};
+$('zi').onclick=function(){ZM=Math.min(3,ZM+.25);$('zv').textContent=Math.round(ZM*100)+'%';NS=1;pv();NS=0};$('zo').onclick=function(){ZM=Math.max(.5,ZM-.25);$('zv').textContent=Math.round(ZM*100)+'%';NS=1;pv();NS=0};$('zr').onclick=function(){ZM=1;$('zv').textContent='100%';NS=1;pv();NS=0};$('srch').oninput=function(){renderRecs()};
+$('rs').onclick=function(){if(confirm('Reset ALL settings and events to default?')){S=JSON.parse(JSON.stringify(DEF));CE=0;ref()}};
+function sw(p){$('pS').classList.toggle('hide',p!='S');$('pR').classList.toggle('hide',p!='R');$('tabS').className='b'+(p=='S'?'':' bo');$('tabR').className='b'+(p=='R'?'':' bo');if(p=='R')list();else pv()}
+$('tabS').onclick=function(){sw('S')};$('tabR').onclick=function(){sw('R')};
+$('login').onclick=function(){if(API.indexOf('PASTE')==0){$('e3').textContent='API URL not set yet. Paste your Apps Script URL in the API line of the HTML file, then upload it again.';return}PW=$('pw').value;$('e3').innerHTML=load(tr('check'));api('login').then(function(r){if(r.ok){$('lg').classList.add('hide');$('dash').classList.remove('hide');$('e3').textContent='';buildForm();pv();DIRTYOK=true}else{PW='';$('e3').textContent=(!r.error||r.error==='Wrong password')?tr('wrongpw'):r.error}})};
+$('lo').onclick=function(){PW='';$('dash').classList.add('hide');$('lg').classList.remove('hide');$('pw').value=''};
+$('chpw').onclick=function(){var n=prompt('New password (min 3 characters):');if(n)api('chpw',{newpw:n}).then(function(r){if(r.ok){PW=n;alert('Password changed.')}else alert(r.error)})};
+/* records */
+function list(){$('cnt').innerHTML=load(tr('loading'));api('list').then(function(r){RECS=r.records||[];renderRecs()})}
+function renderRecs(){fltUI();var p=RECS.filter(function(x){return x.status=='Pending'}).length,ap=RECS.filter(function(x){return x.status=='Approved'}).length,dn=RECS.filter(function(x){return x.dl>0}).length,td=RECS.reduce(function(m,x){return m+(x.dl||0)},0);
+ $('stats').innerHTML=[['stT',RECS.length,'all'],['stA',ap,'Approved'],['stP',p,'Pending'],['stD',dn,'dl'],['stN',td,'dl']].map(function(c){return '<div class="stat" data-s="'+c[2]+'"><b>'+c[1]+'</b><span>'+tr(c[0]).toUpperCase()+'</span></div>'}).join('');$('cnt').textContent=RECS.length+' '+tr('cnt1')+' • '+p+' '+tr('cnt2');
+ $('tb').innerHTML=RECS.map(function(x,i){if(!pass(x))return '';return '<tr><td>'+esc(x.id)+'</td><td>'+esc(x.name)+'</td><td>'+esc(x.mobile)+'</td><td>'+esc(evOf(x).name)+'</td><td>'+esc(dOnly(x.date))+'</td><td style="font-size:12px">'+esc((S.fields||[]).map(function(f){return x.extra&&x.extra[f.id]?f.label+': '+x.extra[f.id]:''}).filter(Boolean).join(' | '))+'</td><td><span class="st '+x.status+'">'+esc(tr('s'+x.status)==='s'+x.status?x.status:tr('s'+x.status))+'</span></td><td>'+(x.dl||0)+'</td><td>'+esc(dlWhen(x))+'</td><td><button class="b bo" data-v="'+i+'">'+tr('bView')+'</button> '+(x.status!='Approved'?'<button class="b" data-a="'+i+'">'+tr('bApp')+'</button> ':'')+(x.status=='Pending'?'<button class="b bo" data-r="'+i+'">'+tr('bRej')+'</button> ':'')+'<button class="b bo" data-e="'+i+'">'+tr('bEdit')+'</button> <button class="b bo" data-p="'+i+'">'+tr('bPhoto')+'</button> <button class="b bo" data-d="'+i+'">'+tr('bDel')+'</button></td></tr>'}).join('')||'<tr><td colspan="10">'+tr('noRec')+'</td></tr>'}
+$('pf').onchange=function(){var f=this.files[0];if(f&&PI!==null)readImg(f,function(u){api('edit',{id:RECS[PI].id,photo:u}).then(list)},220,'jpeg')};
+$('tb').onclick=function(e){var d=e.target.dataset,x;
+ if(d.v!==undefined)show(RECS[+d.v],'aout',true);
+ if(d.a!==undefined)api('approve',{ids:[RECS[+d.a].id]}).then(list);
+ if(d.r!==undefined)api('reject',{ids:[RECS[+d.r].id]}).then(list);
+ if(d.p!==undefined)openEdit(+d.p);
+ if(d.e!==undefined)openEdit(+d.e);
+ if(d.d!==undefined&&confirm('Delete this record?'))api('del',{id:RECS[+d.d].id}).then(function(){$('aout').innerHTML='';list()})};
+$('addst').onclick=function(){var n=prompt('Student full name:');if(!n)return;var m=prompt('10-digit mobile number:');if(!m)return;api('register',{name:n,mobile:m,admin:true,eventId:E().id}).then(function(r){if(!r.ok)alert(r.error);list()})};
+$('apall').onclick=function(){api('approve',{ids:'all'}).then(list)};
+function batch(fn,done){var i=0;(function nx(){if(i>=RECS.length){done();$('prog').textContent='Done.';return}$('prog').textContent='Preparing '+(i+1)+' / '+RECS.length+'…';snap(RECS[i]).then(function(c){return fn(RECS[i],c,i)}).then(function(){i++;nx()})})()}
+$('pall').onclick=function(){if(!RECS.length)return alert('No records.');var p=null;batch(function(r,c,i){var D=dims(tpl(r));if(!p)p=newPdf(D);else p.addPage([D.w,D.h],D.w>=D.h?'l':'p');p.addImage(c.toDataURL('image/jpeg',.9),'JPEG',0,0,D.w,D.h)},function(){p.save('All-Certificates.pdf')})};
+$('zip').onclick=function(){if(!RECS.length)return alert('No records.');var z=new JSZip(),f=$('zf').value;
+ batch(function(r,c){var n=fname(r),D=dims(tpl(r));if(f=='pdf'){var p=newPdf(D);p.addImage(c.toDataURL('image/jpeg',.92),'JPEG',0,0,D.w,D.h);z.file(n+'.pdf',p.output('blob'))}else z.file(n+'.'+f,c.toDataURL(f=='jpg'?'image/jpeg':'image/png',.92).split(',')[1],{base64:true})},
+ function(){z.generateAsync({type:'blob'}).then(function(b){dl(URL.createObjectURL(b),'Certificates-'+f.toUpperCase()+'.zip')})})};
+function rows(){return RECS.filter(pass).map(function(r){var o={ID:r.id,Name:r.name,Mobile:r.mobile,Event:evOf(r).name,Date:r.date,Status:r.status,Downloads:r.dl||0,'Last download':dlWhen(r)};(S.fields||[]).forEach(function(f){o[f.label]=(r.extra||{})[f.id]||''});return o})}
+$('xls').onclick=function(){var wb=XLSX.utils.book_new();XLSX.utils.book_append_sheet(wb,XLSX.utils.json_to_sheet(rows()),'Certificates');XLSX.writeFile(wb,'Certificates.xlsx')};
+$('csv').onclick=function(){var t=XLSX.utils.sheet_to_csv(XLSX.utils.json_to_sheet(rows()));dl(URL.createObjectURL(new Blob(['\ufeff'+t],{type:'text/csv'})),'Certificates.csv')};
+$('clr').onclick=function(){if(confirm('Delete ALL records?'))api('clear').then(function(){$('aout').innerHTML='';list()})};
+$('imf').onchange=function(){var f=this.files[0];if(!f)return;this.value='';var fr=new FileReader();fr.onload=function(){var wb=XLSX.read(fr.result,{type:'array'}),js=XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{defval:''}),list0=[],SEEN={};
+ js.forEach(function(r){var n='',m='',x={};Object.keys(r).forEach(function(k){var l=k.toLowerCase().trim(),hit=false;(S.fields||[]).forEach(function(f){if(f.label&&l===String(f.label).toLowerCase().trim()){hit=true;if(String(r[k]).trim())x[f.id]=String(r[k]).trim()}});if(!hit&&/name|নাম/.test(l))n=String(r[k]).trim();if(!hit&&/mobile|phone|mob|মোবাইল/.test(l))m=String(r[k]).replace(/\.0+$/,'').replace(/\D/g,'').slice(-10)});if(n&&m&&!SEEN[m]){SEEN[m]=1;list0.push({n:n,m:m,x:x})}});
+ if(!list0.length)return alert('No rows found. Use columns: Name, Mobile.');if(!confirm('Import '+list0.length+' students into event “'+E().name+'” (auto-approved)?'))return;
+ var i=0,ok=0,bad=[];(function nx(){if(i>=list0.length){$('prog').textContent='Import done: '+ok+' added, '+bad.length+' skipped'+(bad.length?' ('+bad.slice(0,5).join('; ')+(bad.length>5?'…':'')+')':'');list();return}
+  $('prog').textContent='Importing '+(i+1)+' / '+list0.length+'…';api('register',{name:list0[i].n,mobile:list0[i].m,extra:list0[i].x,admin:true,eventId:E().id}).then(function(r){if(r.ok)ok++;else bad.push(list0[i].n+': '+r.error);i++;nx()})})()};fr.readAsArrayBuffer(f)};
+var LASTV='';
+function syncNow(){if(document.hidden||!LOADED)return;if(PW&&(PEND||SAVING||$('dash').classList.contains('hide')||$('form').contains(document.activeElement)))return;api('ver').then(function(r){if(!r||!r.ok)return;if(LASTV&&r.ver!==LASTV){api('getSettings').then(function(x){if(x&&x.ok&&x.settings){S=mig(x.settings);LASTV=x.ver||r.ver;cacheS(x.settings);CE=Math.min(CE,S.events.length-1);if(PW){NS=1;buildForm();pv();NS=0}applyLang()}})}else if(!LASTV)LASTV=r.ver})}
+setInterval(syncNow,20000);document.addEventListener('visibilitychange',function(){if(!document.hidden)syncNow()});
+setInterval(function(){if(PW&&!document.hidden&&!$('pR').classList.contains('hide'))api('list').then(function(r){if(r&&r.records){RECS=r.records;renderRecs()}})},30000);
+/* ===== v2 additions ===== */
+var FLT='all',HIST=[],EI=0,XI=null,XX=0,XY=0,XD=null,XPH=null,PEND=false,SAVING=false,SEQ=0;
+function cacheS(o){try{localStorage.setItem('scache',JSON.stringify(o))}catch(e){}}
+function dOnly(d){return String(d==null?'':d).replace(/[,\s]+\d{1,2}[:.]\d{2}([:.]\d{2})?\s*([AaPp]\.?[Mm]\.?)?.*$/,'')}
+function showLU(){if(!PW||PEND||SAVING||!S||!S.updatedAt)return;var t=new Date(S.updatedAt);setSt('Last updated: '+t.toLocaleDateString('en-GB')+' '+t.toLocaleTimeString('en-GB'),'#1e6b2f')}
+function setSt(t,c){var e=$('sst');if(e){e.textContent=t;e.style.color=c||''}}
+function doSave(){if(SAVING||!PW)return;SAVING=true;var my=SEQ;S.updatedAt=Date.now();setSt('● Saving…','#8a5a00');api('saveSettings',{settings:S}).then(function(r){SAVING=false;if(r&&r.ok){if(my===SEQ){PEND=false;showLU()}else doSave();api('ver').then(function(v){if(v&&v.ver)LASTV=v.ver})}else{PEND=true;setSt('⚠ Not saved – retrying automatically','#b3261e')}})}
+setInterval(function(){if(PW&&PEND&&!SAVING)doSave()},8000);
+window.addEventListener('online',function(){if(PW&&PEND)doSave();flushDl()});
+window.addEventListener('beforeunload',function(e){if(PW&&PEND){e.preventDefault();e.returnValue=''}});
+function setSite(){nmCfg();var off=S.siteActive==='off'&&!PW;$('siteoff').classList.toggle('hide',!off);$('siteoff').textContent=tr('siteoff');if(off)$('portal').classList.add('hide');else if($('admin').classList.contains('hide'))$('portal').classList.remove('hide')}
+function logDl(r){return;var q=[];try{q=JSON.parse(localStorage.getItem('dlq')||'[]')}catch(e){}q.push({id:r.id,name:r.name,appDate:r.date,at:Date.now()});try{localStorage.setItem('dlq',JSON.stringify(q))}catch(e){}flushDl()}
+function flushDl(){var q=[];try{q=JSON.parse(localStorage.getItem('dlq')||'[]')}catch(e){}if(!q.length)return;api('download',q[0]).then(function(r){if(r&&r.ok!==false){q.shift();try{localStorage.setItem('dlq',JSON.stringify(q))}catch(e){}flushDl()}})}
+function pdate(s){var m=String(s||'').match(/(\d{1,4})[\/\-.](\d{1,2})[\/\-.](\d{1,4})/);if(!m)return null;var a=+m[1],b=+m[2],c=+m[3];return a>31?new Date(a,b-1,c):new Date(c,b-1,a)}
+function ymd(v){var p=v.split('-');return new Date(+p[0],+p[1]-1,+p[2])}
+function pass(x){var q=($('srch').value||'').toLowerCase();if(FLT==='dl'){if(!(x.dl>0))return false}else if(FLT!=='all'&&x.status!==FLT)return false;if(q&&(x.id+' '+x.name+' '+x.mobile).toLowerCase().indexOf(q)<0)return false;var ev=$('xe').value;if(ev&&evOf(x).id!==ev)return false;var a=$('xd1').value,b=$('xd2').value;if(a||b){var d=pdate(x.date);if(!d)return false;if(a&&d<ymd(a))return false;if(b&&d>ymd(b))return false}return true}
+function fltUI(){var c=function(s){return RECS.filter(function(x){return x.status==s}).length},xe=$('xe'),cv=xe.value;
+$('flt').innerHTML=[['all','All',RECS.length],['Pending',tr('sPending'),c('Pending')],['Approved',tr('sApproved'),c('Approved')],['Rejected',tr('sRejected'),c('Rejected')],['dl','Downloaded',RECS.filter(function(x){return x.dl>0}).length]].map(function(a){return '<button class="b'+(FLT==a[0]?'':' bo')+'" data-f="'+a[0]+'">'+a[1]+' ('+a[2]+')</button>'}).join('');
+xe.innerHTML='<option value="">All applications</option>'+S.events.map(function(e){return '<option value="'+esc(e.id)+'">'+esc(e.name)+'</option>'}).join('');xe.value=cv}
+$('flt').onclick=function(e){var f=e.target.dataset.f;if(f){FLT=f;renderRecs()}};
+$('xe').onchange=$('xd1').onchange=$('xd2').onchange=function(){renderRecs()};
+function idSplit(id){var a=String(id||'').split('-');if(a.length>=3){var n=a.pop(),y=a.pop();return[a.join('-'),y,n]}return[id||'','','']}
+function openEdit(i){var x=RECS[i],p=idSplit(x.id),h='';EI=i;XI=null;XPH=null;
+function f(l,k,v){return '<div class="g"><label>'+l+'</label><input data-ef="'+k+'" value="'+esc(v||'')+'"></div>'}
+h+=f('NAME','name',x.name)+f('MOBILE','mobile',x.mobile);
+(S.fields||[]).forEach(function(q){h+=f(String(q.label||'').toUpperCase(),'x_'+q.id,(x.extra||{})[q.id])});
+h+='<div class="g"><label>CERTIFICATE NUMBER – 3 PARTS (PREFIX · YEAR · NUMBER)</label><div class="im"><input data-ef="p1" value="'+esc(p[0])+'" style="width:30%"><input data-ef="p2" value="'+esc(p[1])+'" style="width:30%"><input data-ef="p3" value="'+esc(p[2])+'" style="width:30%"></div></div>';
+h+='<div class="g"><label>PHOTO</label><div class="im">'+(x.photo&&x.photo!=='PH'?img(x.photo):'')+'</div><input type="file" accept="image/*" id="ephf"><div id="ecrp" class="hide" style="margin-top:8px"><canvas id="ecc" width="220" height="220" style="width:220px;max-width:100%;touch-action:none;border:1px solid var(--bd);border-radius:10px;cursor:grab"></canvas><div class="g"><label>ZOOM</label><input type="range" id="ecz" min="100" max="400" value="100"></div><div class="g"><label>BRIGHTNESS</label><input type="range" id="ecb" min="50" max="150" value="100"></div><p class="s">Preview – drag to position. Saved only when you press Save.</p></div></div>';
+$('ebody').innerHTML=h;$('eerr').textContent='';$('emod').classList.remove('hide')}
+function xdraw(){var c=$('ecc'),x=c.getContext('2d'),z=(+$('ecz').value||100)/100,sc=Math.max(220/XI.width,220/XI.height)*z,w=XI.width*sc,h=XI.height*sc;XX=Math.min(0,Math.max(220-w,XX));XY=Math.min(0,Math.max(220-h,XY));x.fillStyle='#fff';x.fillRect(0,0,220,220);x.filter='brightness('+$('ecb').value+'%)';x.drawImage(XI,XX,XY,w,h);x.filter='none';XPH=c.toDataURL('image/jpeg',.82)}
+$('ebody').addEventListener('change',function(e){if(e.target.id!=='ephf')return;var f=e.target.files[0];XPH=null;$('ecrp').classList.add('hide');if(!f)return;var fr=new FileReader();fr.onload=function(){var im=new Image();im.onload=function(){XI=im;var b=Math.max(220/im.width,220/im.height);XX=(220-im.width*b)/2;XY=(220-im.height*b)/2;$('ecz').value=100;$('ecb').value=100;$('ecrp').classList.remove('hide');xdraw()};im.src=fr.result};fr.readAsDataURL(f)});
+$('ebody').addEventListener('input',function(e){if(XI&&(e.target.id=='ecz'||e.target.id=='ecb'))xdraw()});
+$('ebody').addEventListener('pointerdown',function(e){if(e.target.id!=='ecc')return;XD={x:e.clientX,y:e.clientY,cx:XX,cy:XY};try{e.target.setPointerCapture(e.pointerId)}catch(z){}});
+$('ebody').addEventListener('pointermove',function(e){if(!XD||!XI)return;var k=220/$('ecc').getBoundingClientRect().width;XX=XD.cx+(e.clientX-XD.x)*k;XY=XD.cy+(e.clientY-XD.y)*k;xdraw()});
+$('ebody').addEventListener('pointerup',function(){XD=null});$('ebody').addEventListener('pointercancel',function(){XD=null});
+$('ecx').onclick=function(){$('emod').classList.add('hide')};
+$('esv').onclick=function(){var x=RECS[EI],g=function(k){var e=document.querySelector('[data-ef="'+k+'"]');return e?e.value.trim():''},ex=Object.assign({},x.extra||{});
+(S.fields||[]).forEach(function(q){var v=g('x_'+q.id);if(v)ex[q.id]=v;else delete ex[q.id]});
+var nid=[g('p1'),g('p2'),g('p3')].filter(Boolean).join('-')||x.id;$('eerr').innerHTML=load(tr('wait'));
+api('edit',{id:x.id,name:g('name')||x.name,mobile:g('mobile')||x.mobile,newId:nid,extra:ex}).then(function(r){if(r&&r.ok===false){$('eerr').textContent=r.error;return null}return XPH?api('edit',{id:nid,photo:XPH}):r}).then(function(r){if(r===null)return;$('emod').classList.add('hide');list()})};
+
+
+var NMC={en:'A-Za-z',bn:'\\u0980-\\u09FF\\u200c\\u200d',hi:'\\u0900-\\u097F\\u200c\\u200d'};
+function nmOk(n){if(n.trim().length<2)return false;return true;return new RegExp('^['+NMC[l]+" .'-]+$").test(n)}
+function nmCfg(){$('nm').placeholder=tr(('any')==='en'?'nmph':'nmph2')}
+$('rxl').onclick=function(){if(!RECS.length){alert('No data yet');return}var rows=RECS.map(function(x,i){var o={'Sl':i+1,'Applicant ID':x.id,'Name':x.name,'Mobile':x.mobile,'Application':evOf(x).name};(S.fields||[]).forEach(function(f){o[f.label||f.id]=(x.extra||{})[f.id]||''});var t=x.at?new Date(x.at):null;o['Registration Date']=t?t.toLocaleDateString('en-GB'):x.date;o['Status']=x.status;o['Photo']=x.photo&&x.photo!=='PH'?'Yes':'No';return o});var wb=XLSX.utils.book_new(),ws=XLSX.utils.json_to_sheet(rows);ws['!cols']=Object.keys(rows[0]).map(function(){return{wch:22}});XLSX.utils.book_append_sheet(wb,ws,'Registrations');XLSX.writeFile(wb,'All-Registration-Data-'+new Date().toISOString().slice(0,10)+'.xlsx')};
+$('stats').onclick=function(e){var t=e.target.closest('.stat');if(!t)return;FLT=t.dataset.s;renderRecs();$('flt').scrollIntoView({behavior:'smooth',block:'start'})};
+/* start */
+var _c=null;try{_c=JSON.parse(localStorage.getItem('scache')||'null')}catch(e){}
+if(_c)S=mig(_c);
+if(!_c&&API.indexOf('PASTE')!=0){document.body.classList.add('ld');setTimeout(function(){document.body.classList.remove('ld')},8000)}
+applyLang();
+if(API.indexOf('PASTE')==0)$('cfgerr').classList.remove('hide');
+else api('getSettings').then(function(r){if((r&&r.ok)||!_c)S=mig(r&&r.settings);if(r&&r.ok)cacheS(r.settings);applyLang();document.body.classList.remove('ld');LOADED=!!(r&&r.ok);LASTV=(r&&r.ver)||'';});
+</script>
+</body>
+</html>
